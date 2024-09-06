@@ -10,47 +10,6 @@ const equalWidthSvg = `<svg t="1725606034670" class="icon" viewBox="0 0 1088 102
 const equalHeightSvg = `<svg t="1725606224564" class="icon" viewBox="0 0 1088 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7790" width="100%"><path d="M572.16 936a42.688 42.688 0 0 1-42.688-42.688V130.688c0-23.616 19.136-42.688 42.688-42.688h266.688c23.552 0 42.624 19.072 42.624 42.688v762.624a42.688 42.688 0 0 1-42.624 42.688H572.16z" fill="#666666" p-id="7791"></path><path d="M318.016 214.72c14.08 0 25.6 11.456 25.6 25.6v543.36a25.6 25.6 0 1 1-51.2 0v-543.36c0-14.144 11.456-25.6 25.6-25.6z" fill="#666666" p-id="7792"></path><path d="M306.944 94.4a12.8 12.8 0 0 1 22.144 0l106.368 184.192a12.8 12.8 0 0 1-11.072 19.2H211.648a12.8 12.8 0 0 1-11.072-19.2l106.368-184.192zM306.944 929.6a12.8 12.8 0 0 0 22.144 0l106.368-184.192a12.8 12.8 0 0 0-11.072-19.2H211.648a12.8 12.8 0 0 0-11.072 19.2l106.368 184.192z" fill="#666666" p-id="7793"></path></svg>`
 
 const current_node_list = []; // 存储已选中的节点
-
-function pollForCanvas() {
-    const canvas = document.querySelector('canvas#graph-canvas');
-    if (canvas) {
-        // 监听左键单击事件
-        canvas.addEventListener('click', function (event) {
-            event.preventDefault();
-
-            const { offsetX, offsetY } = event;
-
-            // 获取当前的 `LGraphCanvas` 数据
-            const current_node = event.target.data?.current_node;
-
-            // 判断 `current_node` 是否存在
-            if (current_node !== null && current_node !== undefined) {
-                // 判断 `current_node` 是否已经在 `current_node_list` 中
-                const nodeExists = current_node_list.some(node => node.id === current_node.id);
-                if (!nodeExists) {
-                    // 如果当前节点不存在列表中，则添加
-                    current_node_list.push(current_node);
-                }
-            } else {
-                // 如果没有选中的节点，清空列表
-                current_node_list.length = 0;
-                ButtonManager.hide();
-            }
-
-            const selectedNodes = current_node_list.filter(node => node.is_selected === true);
-
-            if (selectedNodes.length >= 2) {
-                ButtonManager.show();
-            }
-        });
-    } else {
-        setTimeout(pollForCanvas, 1000); // 每隔 1 秒尝试查找一次
-    }
-}
-
-// 启动轮询查找
-pollForCanvas();
-
 function getTopNode(selectedNodes) {
     // 通过比较节点的 y 坐标，找到最上方的节点
     return selectedNodes.reduce((topNode, node) => (node.pos[1] < topNode.pos[1] ? node : topNode), selectedNodes[0]);
@@ -59,6 +18,11 @@ function getTopNode(selectedNodes) {
 const ButtonManager = {
     isInitialized: false, // 检查是否已经初始化
     buttonContainer: null, // 保存按钮容器
+    initialX: 0,  // 初始位置X
+    initialY: 0,  // 初始位置Y
+    dragStartX: 0, // 拖拽开始时的X
+    dragStartY: 0, // 拖拽开始时的Y
+    isDragging: false, // 检查是否正在拖拽
 
     // 初始化按钮
     init() {
@@ -71,12 +35,15 @@ const ButtonManager = {
                 position: absolute;
                 top: 20px;
                 right: 10px;
+                left: unset;
+                bottom: unset;
                 display: flex;
-                gap: 2px;
                 background: #333333;
                 padding: 4px;
                 border-radius: 4px;
-                z-index: 9999;
+                z-index: 999;
+                width: 290px;
+                white-space: nowrap; /* 禁止换行，确保按钮在同一行显示 */
             }
             .custom-button {
                 width: 25px;
@@ -92,7 +59,7 @@ const ButtonManager = {
                 transition: background-color 0.3s ease;
             }
             .custom-button:hover {
-                background-color: #555555; /* 在 hover 时改变背景颜色 */
+                background-color: #555555;
             }
             .divider {
                 width: 2.5px;
@@ -100,6 +67,10 @@ const ButtonManager = {
                 background-color: #262626;
                 margin: 5px 4px;
                 border-radius: 2.5px;
+                cursor: grab; 
+            }
+            .divider:active {
+                cursor: grabbing;
             }
         `;
         document.head.appendChild(style);
@@ -107,6 +78,10 @@ const ButtonManager = {
         // 创建按钮容器
         this.buttonContainer = document.createElement('div');
         this.buttonContainer.id = 'alignment-buttons';
+
+        // 从 localStorage 恢复位置
+        this.restorePosition();
+
         document.body.appendChild(this.buttonContainer);
 
         // 创建按钮并分配功能
@@ -116,6 +91,11 @@ const ButtonManager = {
                 // 创建分割线
                 const divider = document.createElement('div');
                 divider.classList.add('divider');
+                // 添加拖拽功能
+                divider.addEventListener('mousedown', this.onDragStart.bind(this));
+                document.addEventListener('mousemove', this.onDragging.bind(this));
+                document.addEventListener('mouseup', this.onDragEnd.bind(this));
+
                 this.buttonContainer.appendChild(divider);
             } else {
                 // 创建按钮
@@ -131,6 +111,7 @@ const ButtonManager = {
         this.isInitialized = true; // 标记已经初始化
     },
 
+    // 获取按钮配置
     getButtons() {
         return [
             /* 左对齐 */
@@ -161,7 +142,6 @@ const ButtonManager = {
             { id: 'equalHeight', svg: equalHeightSvg, action: this.equalHeight.bind(this) },
         ];
     },
-
     // 显示按钮
     show() {
         if (!this.isInitialized) this.init(); // 如果没有初始化，先初始化
@@ -174,7 +154,88 @@ const ButtonManager = {
             this.buttonContainer.style.display = 'none'; // 隐藏按钮容器
         }
     },
+    // 开始拖拽
+    onDragStart(e) {
+        if (e.target.classList.contains('divider')) {
+            this.isDragging = true;
+            this.initialX = e.clientX;
+            this.initialY = e.clientY;
+            const rect = this.buttonContainer.getBoundingClientRect();
+            this.dragStartX = rect.left;
+            this.dragStartY = rect.top;
+            // 锁定宽度和高度，防止拖拽时改变
+            this.buttonContainer.style.width = `${rect.width}px`;
+            this.buttonContainer.style.height = `${rect.height}px`;
+        }
+    },
 
+    // 拖拽中
+    onDragging(e) {
+        if (this.isDragging) {
+            const deltaX = e.clientX - this.initialX;
+            const deltaY = e.clientY - this.initialY;
+            this.buttonContainer.style.left = `${this.dragStartX + deltaX}px`;
+            this.buttonContainer.style.top = `${this.dragStartY + deltaY}px`;
+        }
+    },
+    // 结束拖拽
+    onDragEnd() {
+        if (this.isDragging) {
+            this.isDragging = false;
+
+            // 获取按钮容器的位置信息
+            const rect = this.buttonContainer.getBoundingClientRect();
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            // 计算距离四个边的距离
+            const distanceToTop = rect.top;
+            const distanceToBottom = windowHeight - rect.bottom;
+            const distanceToLeft = rect.left;
+            const distanceToRight = windowWidth - rect.right;
+
+            // 选择两个最近的边
+            let top = 'unset';
+            let bottom = 'unset';
+            let left = 'unset';
+            let right = 'unset';
+
+            if (distanceToTop < distanceToBottom) {
+                top = `${distanceToTop}px`;
+            } else {
+                bottom = `${distanceToBottom}px`;
+            }
+
+            if (distanceToLeft < distanceToRight) {
+                left = `${distanceToLeft}px`;
+            } else {
+                right = `${distanceToRight}px`;
+            }
+
+            // 更新样式使其根据距离四边的情况固定
+            this.buttonContainer.style.top = top;
+            this.buttonContainer.style.bottom = bottom;
+            this.buttonContainer.style.left = left;
+            this.buttonContainer.style.right = right;
+
+            // 保存位置到 localStorage
+            localStorage.setItem('buttonContainerPosition', JSON.stringify({ top, left, right, bottom }));
+
+            // 恢复自动宽度和高度
+            this.buttonContainer.style.width = 'auto';
+            this.buttonContainer.style.height = 'auto';
+        }
+    },
+    // 恢复位置
+    restorePosition() {
+        const savedPosition = JSON.parse(localStorage.getItem('buttonContainerPosition'));
+        if (savedPosition) {
+            this.buttonContainer.style.top = savedPosition.top;
+            this.buttonContainer.style.bottom = savedPosition.bottom;
+            this.buttonContainer.style.left = savedPosition.left;
+            this.buttonContainer.style.right = savedPosition.right;
+        }
+    },
     // 获取当前选中的节点
     getSelectedNodes() {
         return current_node_list.filter(node => node.is_selected === true);
@@ -193,10 +254,15 @@ const ButtonManager = {
 
     // 左对齐
     alignLeft() {
-        const leftMost = Math.min(...this.getSelectedNodes().map(node => node.pos[0]));
-        this.alignNodesByProperty(0, leftMost);
+        const selectedNodes = this.getSelectedNodes();
+        if (selectedNodes.length === 1) {
+            selectedNodes[0].pos[0] = 0;
+        } else if (selectedNodes.length > 1) {
+            const leftMost = Math.min(...selectedNodes.map(node => node.pos[0]));
+            this.alignNodesByProperty(0, leftMost);
+        }
+        LGraphCanvas.active_canvas.setDirty(true, true);
     },
-
     // 右对齐
     alignRight() {
         const rightMost = Math.max(...this.getSelectedNodes().map(node => node.pos[0] + node.size[0]));
@@ -205,11 +271,16 @@ const ButtonManager = {
         });
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
-
     // 顶部对齐
     alignTop() {
-        const topMost = Math.min(...this.getSelectedNodes().map(node => node.pos[1]));
-        this.alignNodesByProperty(1, topMost);
+        const selectedNodes = this.getSelectedNodes();
+        if (selectedNodes.length === 1) {
+            selectedNodes[0].pos[1] = 0;
+        } else if (selectedNodes.length > 1) {
+            const topMost = Math.min(...selectedNodes.map(node => node.pos[1]));
+            this.alignNodesByProperty(1, topMost);
+        }
+        LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 底部对齐
@@ -282,17 +353,68 @@ const ButtonManager = {
     // 通用的节点分布方法
     distributeNodes(axis) {
         const nodes = this.getSelectedNodes();
+
         if (nodes.length > 1) {
+            // 按照节点在 axis 轴上的位置（高低）进行排序
+            nodes.sort((a, b) => a.pos[axis] - b.pos[axis]);
+
+            // 获取最小和最大的位置范围
             const min = Math.min(...nodes.map(node => node.pos[axis]));
             const max = Math.max(...nodes.map(node => node.pos[axis] + node.size[axis]));
+
+            // 计算节点的总尺寸
             const totalSize = nodes.reduce((sum, node) => sum + node.size[axis], 0);
+
+            // 计算间距
             const spacing = (max - min - totalSize) / (nodes.length - 1);
+
+            // 初始化当前分布位置
             let current = min;
+
+            // 遍历排序后的节点，按顺序分布
             nodes.forEach(node => {
-                node.pos[axis] = current;
-                current += node.size[axis] + spacing;
+                node.pos[axis] = current;  // 设置当前节点位置
+                current += node.size[axis] + spacing;  // 更新下一个节点位置
             });
+
+            // 重新渲染画布
             LGraphCanvas.active_canvas.setDirty(true, true);
         }
     }
 };
+
+function pollForCanvas() {
+    const canvas = document.querySelector('canvas#graph-canvas');
+    if (canvas) {
+        ButtonManager.show();
+        // 监听左键单击事件
+        canvas.addEventListener('click', function (event) {
+            event.preventDefault();
+
+            const { offsetX, offsetY } = event;
+
+            // 获取当前的 `LGraphCanvas` 数据
+            const current_node = event.target.data?.current_node;
+
+            // 判断 `current_node` 是否存在
+            if (current_node !== null && current_node !== undefined) {
+                // 判断 `current_node` 是否已经在 `current_node_list` 中
+                const nodeExists = current_node_list.some(node => node.id === current_node.id);
+                if (!nodeExists) {
+                    // 如果当前节点不存在列表中，则添加
+                    current_node_list.push(current_node);
+                }
+            } else {
+                // 如果没有选中的节点，清空列表
+                current_node_list.length = 0;
+            }
+            // const selectedNodes = current_node_list.filter(node => node.is_selected === true);
+        });
+    } else {
+        setTimeout(pollForCanvas, 1000); // 每隔 1 秒尝试查找一次
+    }
+}
+
+// 启动轮询查找
+pollForCanvas();
+
