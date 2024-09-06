@@ -10,3 +10,6 @@ NodeAligner is a powerful plugin for aligning, distributing, and resizing nodes 
 
 ## Installation
 1. Clone the repository:
+```
+  git clone https://github.com/Tenney95/ComfyUI-NodeAligner.git
+```
