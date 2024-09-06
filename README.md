@@ -19,9 +19,14 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    Select a single node; left and top alignment will reset the node's `left` and `top` to zero.
 2. 按住 Shift 键或 Ctrl 键，点选多个节点，点击按钮，即可完成对齐和分布。  
    Hold the Shift or Ctrl key, select multiple nodes, and click the button to complete alignment and distribution.
+3. 点击空白处取消选择。  
+   Click on the blank space to deselect.
 
    ps: 按住 Shift 进行拖拽可以对多个选择节点进行拖拽。  
    ps: Hold Shift to drag and move multiple selected nodes.
+
+<img src="example.gif" width="800">
+
 
 ## 安装 Installation
 1. 克隆仓库：  
