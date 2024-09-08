@@ -10,10 +10,6 @@ const equalWidthSvg = `<svg t="1725606034670" class="icon" viewBox="0 0 1088 102
 const equalHeightSvg = `<svg t="1725606224564" class="icon" viewBox="0 0 1088 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7790" width="100%"><path d="M572.16 936a42.688 42.688 0 0 1-42.688-42.688V130.688c0-23.616 19.136-42.688 42.688-42.688h266.688c23.552 0 42.624 19.072 42.624 42.688v762.624a42.688 42.688 0 0 1-42.624 42.688H572.16z" fill="#666666" p-id="7791"></path><path d="M318.016 214.72c14.08 0 25.6 11.456 25.6 25.6v543.36a25.6 25.6 0 1 1-51.2 0v-543.36c0-14.144 11.456-25.6 25.6-25.6z" fill="#666666" p-id="7792"></path><path d="M306.944 94.4a12.8 12.8 0 0 1 22.144 0l106.368 184.192a12.8 12.8 0 0 1-11.072 19.2H211.648a12.8 12.8 0 0 1-11.072-19.2l106.368-184.192zM306.944 929.6a12.8 12.8 0 0 0 22.144 0l106.368-184.192a12.8 12.8 0 0 0-11.072-19.2H211.648a12.8 12.8 0 0 0-11.072 19.2l106.368 184.192z" fill="#666666" p-id="7793"></path></svg>`
 
 const current_node_list = []; // 存储已选中的节点
-function getTopNode(selectedNodes) {
-    // 通过比较节点的 y 坐标，找到最上方的节点
-    return selectedNodes.reduce((topNode, node) => (node.pos[1] < topNode.pos[1] ? node : topNode), selectedNodes[0]);
-}
 
 const ButtonManager = {
     isInitialized: false, // 检查是否已经初始化
@@ -342,9 +338,10 @@ const ButtonManager = {
     equalSize(axis) {
         const nodes = this.getSelectedNodes();
         if (nodes.length > 0) {
-            const averageSize = (nodes.reduce((sum, node) => sum + node.size[axis], 0) / nodes.length).toFixed(2);
+            // 找到节点中最大的尺寸
+            const maxSize = Math.max(...nodes.map(node => node.size[axis]));
             nodes.forEach(node => {
-                node.size[axis] = parseFloat(averageSize); // 设置所有节点的大小为平均值
+                node.size[axis] = maxSize; // 设置所有节点的大小为最大值
             });
             LGraphCanvas.active_canvas.setDirty(true, true);
         }
@@ -387,11 +384,10 @@ function pollForCanvas() {
     const canvas = document.querySelector('canvas#graph-canvas');
     if (canvas) {
         ButtonManager.show();
+
         // 监听左键单击事件
         canvas.addEventListener('click', function (event) {
             event.preventDefault();
-
-            const { offsetX, offsetY } = event;
 
             // 获取当前的 `LGraphCanvas` 数据
             const current_node = event.target.data?.current_node;
