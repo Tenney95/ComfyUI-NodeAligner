@@ -251,7 +251,15 @@ const ButtonManager = {
     // 左对齐
     alignLeft() {
         const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length === 1) {
+        if (selectedNodes.length === 0) {
+            // 如果没有选中任何节点，重置视图位置和缩放比例
+            const canvas = LGraphCanvas.active_canvas;
+            if (canvas) {
+                canvas.ds.offset = [80, 140]; // 重置视图位置
+                canvas.ds.scale = 1;          // 重置缩放比例
+                canvas.setDirty(true, true);
+            }
+        } else if (selectedNodes.length === 1) {
             selectedNodes[0].pos[0] = 0;
         } else if (selectedNodes.length > 1) {
             const leftMost = Math.min(...selectedNodes.map(node => node.pos[0]));
@@ -263,7 +271,7 @@ const ButtonManager = {
     alignRight() {
         const rightMost = Math.max(...this.getSelectedNodes().map(node => node.pos[0] + node.size[0]));
         this.getSelectedNodes().forEach(node => {
-            node.pos[0] = rightMost - node.size[0]; // 右对齐
+            node.pos[0] = rightMost - node.size[0];
         });
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
@@ -283,7 +291,7 @@ const ButtonManager = {
     alignBottom() {
         const bottomMost = Math.max(...this.getSelectedNodes().map(node => node.pos[1] + node.size[1]));
         this.getSelectedNodes().forEach(node => {
-            node.pos[1] = bottomMost - node.size[1]; // 底部对齐
+            node.pos[1] = bottomMost - node.size[1];
         });
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
@@ -292,7 +300,7 @@ const ButtonManager = {
     alignCenterHorizontally() {
         const centerY = this.calculateCenter(1);
         this.getSelectedNodes().forEach(node => {
-            node.pos[1] = centerY - node.size[1] / 2; // 垂直居中
+            node.pos[1] = centerY - node.size[1] / 2;
         });
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
@@ -301,7 +309,7 @@ const ButtonManager = {
     alignCenterVertically() {
         const centerX = this.calculateCenter(0);
         this.getSelectedNodes().forEach(node => {
-            node.pos[0] = centerX - node.size[0] / 2; // 水平居中
+            node.pos[0] = centerX - node.size[0] / 2;
         });
         LGraphCanvas.active_canvas.setDirty(true, true);
     },

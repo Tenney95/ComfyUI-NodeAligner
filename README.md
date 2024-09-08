@@ -21,7 +21,10 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    Hold the Shift or Ctrl key, select multiple nodes, and click the button to complete alignment and distribution.
 3. 点击空白处取消选择。  
    Click on the blank space to deselect.
-
+4. 如果没选中任何节点的情况下，点击左对齐这画布返回“0、0”坐标。 
+   If no nodes are selected, clicking left alignment will return the canvas to "0,0" coordinates.
+   
+   
    ps: 按住 Shift 进行拖拽可以对多个选择节点进行拖拽。  
    ps: Hold Shift to drag and move multiple selected nodes.
 
