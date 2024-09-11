@@ -58,11 +58,11 @@ const ButtonManager = {
                 background-color: #555555;
             }
             .divider {
-                width: 2.5px;
+                width: 3.2px;
                 height: 15px;
                 background-color: #262626;
                 margin: 5px 4px;
-                border-radius: 2.5px;
+                border-radius: 9px;
                 cursor: grab; 
             }
             .divider:active {
@@ -392,10 +392,11 @@ function pollForCanvas() {
     const canvas = document.querySelector('canvas#graph-canvas');
     if (canvas) {
         ButtonManager.show();
-
         // 监听左键单击事件
         canvas.addEventListener('click', function (event) {
             event.preventDefault();
+            // console.log(event.target.data);
+            // console.log(event);
 
             // 获取当前的 `LGraphCanvas` 数据
             const current_node = event.target.data?.current_node;
