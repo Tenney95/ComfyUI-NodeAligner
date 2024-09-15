@@ -14,6 +14,8 @@ const current_node_list = []; // 存储已选中的节点
 const ButtonManager = {
     isInitialized: false, // 检查是否已经初始化
     buttonContainer: null, // 保存按钮容器
+    contextMenu: null, // 右键菜单
+    isPermanent: true, // 是否为驻留按钮
     initialX: 0,  // 初始位置X
     initialY: 0,  // 初始位置Y
     dragStartX: 0, // 拖拽开始时的X
@@ -105,6 +107,10 @@ const ButtonManager = {
         });
 
         this.isInitialized = true; // 标记已经初始化
+        this.showContextMenu()
+
+        this.isPermanent = localStorage.getItem('NodeAlignerIsPermanent') == '1';
+        this.isPermanent ? this.show() : this.hide();
     },
 
     // 获取按钮配置
@@ -138,17 +144,54 @@ const ButtonManager = {
             { id: 'equalHeight', svg: equalHeightSvg, action: this.equalHeight.bind(this) },
         ];
     },
+    // 显示右键菜单
+    showContextMenu() {
+        // 创建右键菜单元素
+        this.contextMenu = document.createElement('div');
+        this.contextMenu.id = 'context-menu';
+        this.contextMenu.style.display = 'none'; // 初始设置为不显示
+        this.contextMenu.innerHTML = `
+            <button id="pin-mode">驻留</button>
+            <button id="toggle-on-select">选中后显示</button>
+        `;
+        this.buttonContainer.appendChild(this.contextMenu);
+
+        // 绑定右键菜单显示事件
+        this.buttonContainer.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            this.contextMenu.style.display = 'block';
+            this.contextMenu.style.left = `${event.pageX}px`;
+            this.contextMenu.style.top = `${event.pageY}px`;
+        });
+
+        // 绑定菜单项的点击事件
+        this.contextMenu.querySelector('#pin-mode').addEventListener('click', () => {
+            // 实现固定模式的逻辑
+            this.contextMenu.style.display = 'none'; // 隐藏右键菜
+            this.isPermanent = true;
+            localStorage.setItem('NodeAlignerIsPermanent', '1');
+            this.restorePosition();
+        });
+        this.contextMenu.querySelector('#toggle-on-select').addEventListener('click', () => {
+            // 实现选中后显示模式的逻辑
+            this.buttonContainer.style.display = 'none'; // 默认不显示按钮容器
+            this.contextMenu.style.display = 'none'; // 隐藏右键菜单
+            this.isPermanent = false;
+            localStorage.setItem('NodeAlignerIsPermanent', '0');
+        });
+    },
     // 显示按钮
     show() {
-        if (!this.isInitialized) this.init(); // 如果没有初始化，先初始化
         this.buttonContainer.style.display = 'flex'; // 显示按钮容器
     },
 
     // 隐藏按钮
     hide() {
-        if (this.buttonContainer) {
-            this.buttonContainer.style.display = 'none'; // 隐藏按钮容器
-        }
+        this.buttonContainer.style.display = 'none'; // 隐藏按钮容器
+    },
+    setPosition(x, y) {
+        this.buttonContainer.style.left = `${x}px`;
+        this.buttonContainer.style.top = `${y}px`;
     },
     // 开始拖拽
     onDragStart(e) {
@@ -215,7 +258,7 @@ const ButtonManager = {
             this.buttonContainer.style.right = right;
 
             // 保存位置到 localStorage
-            localStorage.setItem('buttonContainerPosition', JSON.stringify({ top, left, right, bottom }));
+            localStorage.setItem('NodeAlignerButtonContainerPosition', JSON.stringify({ top, left, right, bottom }));
 
             // 恢复自动宽度和高度
             this.buttonContainer.style.width = 'auto';
@@ -224,7 +267,7 @@ const ButtonManager = {
     },
     // 恢复位置
     restorePosition() {
-        const savedPosition = JSON.parse(localStorage.getItem('buttonContainerPosition'));
+        const savedPosition = JSON.parse(localStorage.getItem('NodeAlignerButtonContainerPosition'));
         if (savedPosition) {
             this.buttonContainer.style.top = savedPosition.top;
             this.buttonContainer.style.bottom = savedPosition.bottom;
@@ -391,11 +434,11 @@ const ButtonManager = {
 function pollForCanvas() {
     const canvas = document.querySelector('canvas#graph-canvas');
     if (canvas) {
-        ButtonManager.show();
+        ButtonManager.init();
         // 监听左键单击事件
         canvas.addEventListener('click', function (event) {
             event.preventDefault();
-            // console.log(event.target.data);
+            console.log(event);
             // console.log(event);
 
             // 获取当前的 `LGraphCanvas` 数据
@@ -412,8 +455,17 @@ function pollForCanvas() {
             } else {
                 // 如果没有选中的节点，清空列表
                 current_node_list.length = 0;
+                if (!ButtonManager.isPermanent) ButtonManager.hide();
             }
-            // const selectedNodes = current_node_list.filter(node => node.is_selected === true);
+
+            if (!ButtonManager.isPermanent) {
+                const selectedNodes = current_node_list.filter(node => node.is_selected === true);
+                if (selectedNodes.length >= 2) {
+                    ButtonManager.show();
+                    ButtonManager.setPosition(event.layerX, event.layerY - 40)
+                }
+            }
+            
         });
     } else {
         setTimeout(pollForCanvas, 1000); // 每隔 1 秒尝试查找一次
