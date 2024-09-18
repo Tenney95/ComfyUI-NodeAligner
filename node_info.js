@@ -487,21 +487,16 @@ function pollForCanvas() {
         ButtonManager.init();
         // 监听左键单击事件
         canvas.addEventListener('click', function (event) {
-            ButtonManager.init();
-
-            // 监听左键单击事件
-            canvas.addEventListener('click', function (event) {
-                // 检查是否为非驻留模式
-                if (!ButtonManager.isPermanent) {
-                    const selectedNodes = ButtonManager.getSelectedNodes();
-                    if (selectedNodes.length >= 2) {
-                        ButtonManager.show();
-                        ButtonManager.setPosition(event.layerX, event.layerY - 40);
-                    } else {
-                        ButtonManager.hide();
-                    }
+            // 检查是否为非驻留模式
+            if (!ButtonManager.isPermanent) {
+                const selectedNodes = ButtonManager.getSelectedNodes();
+                if (selectedNodes.length >= 2) {
+                    ButtonManager.show();
+                    ButtonManager.setPosition(event.layerX, event.layerY - 40);
+                } else {
+                    ButtonManager.hide();
                 }
-            });
+            }
         });
     } else {
         setTimeout(pollForCanvas, 1000); // 每隔 1 秒尝试查找一次
