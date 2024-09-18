@@ -37,11 +37,12 @@ const ButtonManager = {
                 left: unset;
                 bottom: unset;
                 display: flex;
-                background: #333333;
+                background: #2b2b2b;
                 padding: 4px;
                 border-radius: 4px;
                 z-index: 999;
                 width: 290px;
+                height: 32px;
                 white-space: nowrap; /* 禁止换行，确保按钮在同一行显示 */
             }
             .custom-button {
@@ -50,7 +51,7 @@ const ButtonManager = {
                 background-size: contain;
                 background-repeat: no-repeat;
                 background-position: center;
-                background-color: #333333;
+                background-color: #2b2b2b;
                 border: none;
                 cursor: pointer;
                 padding: 4px;
@@ -63,7 +64,7 @@ const ButtonManager = {
             .divider {
                 width: 3.2px;
                 height: 15px;
-                background-color: #262626;
+                background-color: #1e1e1e;
                 margin: 5px 4px;
                 border-radius: 9px;
                 cursor: grab; 
@@ -135,8 +136,8 @@ const ButtonManager = {
 
         if (!this.hasShownTooltip) {
             // 如果还没有显示过提示，设置悬停事件
-            this.buttonContainer.addEventListener('mouseenter', ()=> {
-                if(!this.hasShownTooltip) {
+            this.buttonContainer.addEventListener('mouseenter', () => {
+                if (!this.hasShownTooltip) {
                     setTimeout(() => {
                         tooltip.style.display = 'block';
                         this.hasShownTooltip = true;
@@ -144,7 +145,7 @@ const ButtonManager = {
                 }
             });
 
-            this.buttonContainer.addEventListener('mouseleave', ()=> {
+            this.buttonContainer.addEventListener('mouseleave', () => {
                 // 删除tooltip 当鼠标离开时隐藏提示
                 tooltip.remove();
             });
@@ -325,7 +326,8 @@ const ButtonManager = {
     },
     // 获取当前选中的节点
     getSelectedNodes() {
-        return current_node_list.filter(node => node.is_selected === true);
+        const selectedNodesObj = LGraphCanvas.active_canvas.selected_nodes;
+        return selectedNodesObj ? Object.values(selectedNodesObj) : [];
     },
 
     // 执行对齐操作的通用方法
@@ -485,34 +487,21 @@ function pollForCanvas() {
         ButtonManager.init();
         // 监听左键单击事件
         canvas.addEventListener('click', function (event) {
-            event.preventDefault();
-            // console.log(event.target);
+            ButtonManager.init();
 
-            // 获取当前的 `LGraphCanvas` 数据
-            const current_node = event.target.data?.current_node;
-
-            // 判断 `current_node` 是否存在
-            if (current_node !== null && current_node !== undefined) {
-                // 判断 `current_node` 是否已经在 `current_node_list` 中
-                const nodeExists = current_node_list.some(node => node.id === current_node.id);
-                if (!nodeExists) {
-                    // 如果当前节点不存在列表中，则添加
-                    current_node_list.push(current_node);
+            // 监听左键单击事件
+            canvas.addEventListener('click', function (event) {
+                // 检查是否为非驻留模式
+                if (!ButtonManager.isPermanent) {
+                    const selectedNodes = ButtonManager.getSelectedNodes();
+                    if (selectedNodes.length >= 2) {
+                        ButtonManager.show();
+                        ButtonManager.setPosition(event.layerX, event.layerY - 40);
+                    } else {
+                        ButtonManager.hide();
+                    }
                 }
-            } else {
-                // 如果没有选中的节点，清空列表
-                current_node_list.length = 0;
-                if (!ButtonManager.isPermanent) ButtonManager.hide();
-            }
-
-            if (!ButtonManager.isPermanent) {
-                const selectedNodes = current_node_list.filter(node => node.is_selected === true);
-                if (selectedNodes.length >= 2) {
-                    ButtonManager.show();
-                    ButtonManager.setPosition(event.layerX, event.layerY - 40)
-                }
-            }
-
+            });
         });
     } else {
         setTimeout(pollForCanvas, 1000); // 每隔 1 秒尝试查找一次
