@@ -21,6 +21,7 @@ const ButtonManager = {
     dragStartX: 0, // 拖拽开始时的X
     dragStartY: 0, // 拖拽开始时的Y
     isDragging: false, // 检查是否正在拖拽
+    hasShownTooltip: false,
 
     // 初始化按钮
     init() {
@@ -70,6 +71,21 @@ const ButtonManager = {
             .divider:active {
                 cursor: grabbing;
             }
+            /* 提示样式 */
+            #tooltip {
+                position: absolute;
+                bottom: -20px;
+                right: 0;
+                background: #333;
+                color: white;
+                padding: 5px 10px;
+                border-radius: 6px;
+                display: none;
+                z-index: 1001;
+                white-space: nowrap;
+                font-size: 12px;
+            }
+            
         `;
         document.head.appendChild(style);
 
@@ -107,10 +123,35 @@ const ButtonManager = {
         });
 
         this.isInitialized = true; // 标记已经初始化
-        this.showContextMenu()
+        this.showContextMenu();
+
+        // 创建工具提示元素
+        const tooltip = document.createElement('div');
+        tooltip.id = 'tooltip';
+        tooltip.textContent = '右键可选按钮呈现模式';  // 工具提示的内容
+        this.buttonContainer.appendChild(tooltip);
+
+        // 从 localStorage 检查是否已经显示过提示
+
+        if (!this.hasShownTooltip) {
+            // 如果还没有显示过提示，设置悬停事件
+            this.buttonContainer.addEventListener('mouseenter', ()=> {
+                if(!this.hasShownTooltip) {
+                    setTimeout(() => {
+                        tooltip.style.display = 'block';
+                        this.hasShownTooltip = true;
+                    }, 1000);
+                }
+            });
+
+            this.buttonContainer.addEventListener('mouseleave', ()=> {
+                // 删除tooltip 当鼠标离开时隐藏提示
+                tooltip.remove();
+            });
+        }
 
         let isPermanent = localStorage.getItem('NodeAlignerIsPermanent');
-        if(isPermanent) {
+        if (isPermanent) {
             this.isPermanent = localStorage.getItem('NodeAlignerIsPermanent') == '1';
             this.isPermanent ? this.show() : this.hide();
         } else {
@@ -200,14 +241,18 @@ const ButtonManager = {
     },
     // 开始拖拽
     onDragStart(e) {
-        if (e.target.classList.contains('divider')) {
-            this.isDragging = true;
-            this.initialX = e.clientX;
-            this.initialY = e.clientY;
-            const rect = this.buttonContainer.getBoundingClientRect();
-            this.dragStartX = rect.left;
-            this.dragStartY = rect.top;
+        if (!e.target.classList.contains('divider')) {
+            return;  // 确保只在点击分割线时开始拖拽
         }
+        this.isDragging = true;
+        this.initialX = e.clientX;
+        this.initialY = e.clientY;
+        this.dragStartX = this.buttonContainer.offsetLeft;
+        this.dragStartY = this.buttonContainer.offsetTop;
+
+        // 临时添加事件监听器
+        document.addEventListener('mousemove', this.onDragging.bind(this));
+        document.addEventListener('mouseup', this.onDragEnd.bind(this));
     },
 
     // 拖拽中
@@ -221,47 +266,48 @@ const ButtonManager = {
     },
     // 结束拖拽
     onDragEnd() {
-        if (this.isDragging) {
-            this.isDragging = false;
+        this.isDragging = false;
+        // 移除事件监听器
+        document.removeEventListener('mousemove', this.onDragging);
+        document.removeEventListener('mouseup', this.onDragEnd);
 
-            // 获取按钮容器的位置信息
-            const rect = this.buttonContainer.getBoundingClientRect();
-            const windowWidth = window.innerWidth;
-            const windowHeight = window.innerHeight;
+        // 获取按钮容器的位置信息
+        const rect = this.buttonContainer.getBoundingClientRect();
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
 
-            // 计算距离四个边的距离
-            const distanceToTop = rect.top;
-            const distanceToBottom = windowHeight - rect.bottom;
-            const distanceToLeft = rect.left;
-            const distanceToRight = windowWidth - rect.right;
+        // 计算距离四个边的距离
+        const distanceToTop = rect.top;
+        const distanceToBottom = windowHeight - rect.bottom;
+        const distanceToLeft = rect.left;
+        const distanceToRight = windowWidth - rect.right;
 
-            // 选择两个最近的边
-            let top = 'unset';
-            let bottom = 'unset';
-            let left = 'unset';
-            let right = 'unset';
+        // 选择两个最近的边
+        let top = 'unset';
+        let bottom = 'unset';
+        let left = 'unset';
+        let right = 'unset';
 
-            if (distanceToTop < distanceToBottom) {
-                top = `${distanceToTop}px`;
-            } else {
-                bottom = `${distanceToBottom}px`;
-            }
-
-            if (distanceToLeft < distanceToRight) {
-                left = `${distanceToLeft}px`;
-            } else {
-                right = `${distanceToRight}px`;
-            }
-
-            // 更新样式使其根据距离四边的情况固定
-            this.buttonContainer.style.top = top;
-            this.buttonContainer.style.bottom = bottom;
-            this.buttonContainer.style.left = left;
-            this.buttonContainer.style.right = right;
-
-            // 保存位置到 localStorage
-            localStorage.setItem('NodeAlignerButtonContainerPosition', JSON.stringify({ top, left, right, bottom }));
+        if (distanceToTop < distanceToBottom) {
+            top = `${distanceToTop}px`;
+        } else {
+            bottom = `${distanceToBottom}px`;
         }
+
+        if (distanceToLeft < distanceToRight) {
+            left = `${distanceToLeft}px`;
+        } else {
+            right = `${distanceToRight}px`;
+        }
+
+        // 更新样式使其根据距离四边的情况固定
+        this.buttonContainer.style.top = top;
+        this.buttonContainer.style.bottom = bottom;
+        this.buttonContainer.style.left = left;
+        this.buttonContainer.style.right = right;
+
+        // 保存位置到 localStorage
+        localStorage.setItem('NodeAlignerButtonContainerPosition', JSON.stringify({ top, left, right, bottom }));
     },
     // 恢复位置
     restorePosition() {
@@ -440,7 +486,7 @@ function pollForCanvas() {
         // 监听左键单击事件
         canvas.addEventListener('click', function (event) {
             event.preventDefault();
-            // console.log(event);
+            // console.log(event.target);
 
             // 获取当前的 `LGraphCanvas` 数据
             const current_node = event.target.data?.current_node;
