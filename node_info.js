@@ -422,8 +422,90 @@ const ButtonManager = {
 
     // 纵向分布
     verticalDistribution() {
-        this.distributeNodes(1);
-    },
+        const nodes = this.getSelectedNodes();
+
+        if (nodes.length > 1) {
+            const axis = 1; // Y轴
+            const otherAxis = 0; // X轴
+            const tolerance = 20; // 用于将节点分组的容差
+            const minSpacing = 20; // 最小间距，保证节点之间至少有 20 像素的间隔
+
+            // 用于存储列的数组
+            const columns = [];
+
+            // 将节点按照 X 轴的位置进行分组（分成列）
+            nodes.forEach(node => {
+                let foundColumn = null;
+
+                for (let column of columns) {
+                    const columnX = column[0].pos[otherAxis];
+
+                    if (Math.abs(columnX - node.pos[otherAxis]) <= tolerance) {
+                        foundColumn = column;
+                        break;
+                    }
+                }
+
+                if (foundColumn) {
+                    foundColumn.push(node);
+                } else {
+                    columns.push([node]);
+                }
+            });
+
+            // 计算每列的总高度
+            const columnHeights = columns.map(column => {
+                const minY = Math.min(...column.map(node => node.pos[axis]));
+                const maxY = Math.max(...column.map(node => node.pos[axis] + node.size[axis]));
+                return maxY - minY;
+            });
+
+            // 找到最高列的高度
+            const maxColumnHeight = Math.max(...columnHeights);
+
+            // 找到所有列中第一个节点的最小 Y 值，用于对齐第一排
+            const minFirstNodeY = Math.min(...columns.map(column => column[0].pos[axis]));
+
+            // 对每列进行处理，类似 distributeNodes 方法
+            columns.forEach((column, columnIndex) => {
+                if (column.length > 1) {
+                    // 按照节点在 Y 轴上的位置（高低）进行排序
+                    column.sort((a, b) => a.pos[axis] - b.pos[axis]);
+
+                    // 获取当前列的最小和最大 Y 位置
+                    const minY = Math.min(...column.map(node => node.pos[axis]));
+
+                    // 计算当前列的节点总尺寸
+                    const totalSize = column.reduce((sum, node) => sum + node.size[axis], 0);
+
+                    // 计算该列的额外可用空间并分配给节点之间的间距
+                    let spacing = (maxColumnHeight - totalSize) / (column.length - 1);
+                    spacing = Math.max(spacing, minSpacing);  // 保证间距不小于最小间距
+
+                    // 初始化当前分布位置，确保每列第一个节点的 Y 轴与最小 Y 对齐
+                    let currentY = minFirstNodeY;
+
+                    // 分布节点
+                    column.forEach((node, idx) => {
+                        node.pos[axis] = currentY;  // 设置当前节点位置
+                        currentY += node.size[axis] + spacing;  // 更新下一个节点位置
+
+                        // 对齐 X 轴位置（所有节点在列内对齐）
+                        node.pos[otherAxis] = column[0].pos[otherAxis];
+                    });
+                } else if (column.length === 1) {
+                    // 单个节点时，保持第一个节点与最小 Y 位置对齐
+                    const node = column[0];
+                    node.pos[axis] = minFirstNodeY;  // 使单节点列的第一个节点与其他列对齐
+                }
+            });
+
+            // 重新渲染画布
+            LGraphCanvas.active_canvas.setDirty(true, true);
+        }
+    }
+
+    ,
 
     // 等宽
     equalWidth() {
