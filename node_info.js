@@ -109,8 +109,13 @@ const ButtonManager = {
         this.isInitialized = true; // 标记已经初始化
         this.showContextMenu()
 
-        this.isPermanent = localStorage.getItem('NodeAlignerIsPermanent') == '1';
-        this.isPermanent ? this.show() : this.hide();
+        let isPermanent = localStorage.getItem('NodeAlignerIsPermanent');
+        if(isPermanent) {
+            this.isPermanent = localStorage.getItem('NodeAlignerIsPermanent') == '1';
+            this.isPermanent ? this.show() : this.hide();
+        } else {
+            this.show()
+        }
     },
 
     // 获取按钮配置
@@ -202,9 +207,6 @@ const ButtonManager = {
             const rect = this.buttonContainer.getBoundingClientRect();
             this.dragStartX = rect.left;
             this.dragStartY = rect.top;
-            // 锁定宽度和高度，防止拖拽时改变
-            this.buttonContainer.style.width = `${rect.width}px`;
-            this.buttonContainer.style.height = `${rect.height}px`;
         }
     },
 
@@ -259,10 +261,6 @@ const ButtonManager = {
 
             // 保存位置到 localStorage
             localStorage.setItem('NodeAlignerButtonContainerPosition', JSON.stringify({ top, left, right, bottom }));
-
-            // 恢复自动宽度和高度
-            this.buttonContainer.style.width = 'auto';
-            this.buttonContainer.style.height = 'auto';
         }
     },
     // 恢复位置
@@ -273,6 +271,10 @@ const ButtonManager = {
             this.buttonContainer.style.bottom = savedPosition.bottom;
             this.buttonContainer.style.left = savedPosition.left;
             this.buttonContainer.style.right = savedPosition.right;
+        } else {
+            // 如果没有保存的位置信息，则使用默认位置
+            this.buttonContainer.style.top = '20px';
+            this.buttonContainer.style.right = '20px';
         }
     },
     // 获取当前选中的节点
@@ -438,7 +440,6 @@ function pollForCanvas() {
         // 监听左键单击事件
         canvas.addEventListener('click', function (event) {
             event.preventDefault();
-            console.log(event);
             // console.log(event);
 
             // 获取当前的 `LGraphCanvas` 数据
@@ -465,7 +466,7 @@ function pollForCanvas() {
                     ButtonManager.setPosition(event.layerX, event.layerY - 40)
                 }
             }
-            
+
         });
     } else {
         setTimeout(pollForCanvas, 1000); // 每隔 1 秒尝试查找一次
