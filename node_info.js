@@ -9,8 +9,6 @@ const verticalDistributionSvg = `<svg t="1725534350231" class="icon" viewBox="0 
 const equalWidthSvg = `<svg t="1725606034670" class="icon" viewBox="0 0 1088 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7213" width="100%"><path d="M978.24 480a42.688 42.688 0 0 1-42.688 42.688H172.928a42.688 42.688 0 0 1-42.688-42.688V213.312c0-23.552 19.072-42.624 42.688-42.624h762.624c23.552 0 42.688 19.072 42.688 42.624V480z" fill="#666666" p-id="7214"></path><path d="M256.96 734.144c0-14.08 11.456-25.6 25.6-25.6h543.36a25.6 25.6 0 0 1 0 51.2h-543.36a25.6 25.6 0 0 1-25.6-25.6z" fill="#666666" p-id="7215"></path><path d="M136.64 745.216a12.8 12.8 0 0 1 0-22.144l184.192-106.368a12.8 12.8 0 0 1 19.2 11.072v212.736a12.8 12.8 0 0 1-19.2 11.072l-184.192-106.368zM971.84 745.216a12.8 12.8 0 0 0 0-22.144l-184.256-106.368a12.8 12.8 0 0 0-19.2 11.072v212.736a12.8 12.8 0 0 0 19.2 11.072l184.256-106.368z" fill="#666666" p-id="7216"></path></svg>`
 const equalHeightSvg = `<svg t="1725606224564" class="icon" viewBox="0 0 1088 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7790" width="100%"><path d="M572.16 936a42.688 42.688 0 0 1-42.688-42.688V130.688c0-23.616 19.136-42.688 42.688-42.688h266.688c23.552 0 42.624 19.072 42.624 42.688v762.624a42.688 42.688 0 0 1-42.624 42.688H572.16z" fill="#666666" p-id="7791"></path><path d="M318.016 214.72c14.08 0 25.6 11.456 25.6 25.6v543.36a25.6 25.6 0 1 1-51.2 0v-543.36c0-14.144 11.456-25.6 25.6-25.6z" fill="#666666" p-id="7792"></path><path d="M306.944 94.4a12.8 12.8 0 0 1 22.144 0l106.368 184.192a12.8 12.8 0 0 1-11.072 19.2H211.648a12.8 12.8 0 0 1-11.072-19.2l106.368-184.192zM306.944 929.6a12.8 12.8 0 0 0 22.144 0l106.368-184.192a12.8 12.8 0 0 0-11.072-19.2H211.648a12.8 12.8 0 0 0-11.072 19.2l106.368 184.192z" fill="#666666" p-id="7793"></path></svg>`
 
-const current_node_list = []; // 存储已选中的节点
-
 const ButtonManager = {
     isInitialized: false, // 检查是否已经初始化
     buttonContainer: null, // 保存按钮容器
@@ -330,94 +328,172 @@ const ButtonManager = {
         return selectedNodesObj ? Object.values(selectedNodesObj) : [];
     },
 
-    // 执行对齐操作的通用方法
-    alignNodesByProperty(prop, value) {
-        const nodes = this.getSelectedNodes();
-        if (nodes.length > 0) {
-            nodes.forEach(node => {
-                node.pos[prop] = value;
-            });
-            LGraphCanvas.active_canvas.setDirty(true, true); // 重新渲染 canvas
-        }
+    // 辅助函数：按照 X 或 Y 坐标分组
+    groupNodesByCoordinate(nodes, axis, tolerance = 100) {
+        const groups = [];
+
+        nodes.forEach(node => {
+            let foundGroup = null;
+
+            for (let group of groups) {
+                const groupCoord = group[0].pos[axis];
+
+                if (Math.abs(groupCoord - node.pos[axis]) <= tolerance) {
+                    foundGroup = group;
+                    break;
+                }
+            }
+
+            if (foundGroup) {
+                foundGroup.push(node);
+            } else {
+                groups.push([node]);
+            }
+        });
+
+        return groups;
     },
 
     // 左对齐
     alignLeft() {
         const selectedNodes = this.getSelectedNodes();
         if (selectedNodes.length === 0) {
-            // 如果没有选中任何节点，重置视图位置和缩放比例
             const canvas = LGraphCanvas.active_canvas;
             if (canvas) {
                 canvas.ds.offset = [80, 140]; // 重置视图位置
                 canvas.ds.scale = 1;          // 重置缩放比例
                 canvas.setDirty(true, true);
             }
-        } else if (selectedNodes.length === 1) {
-            selectedNodes[0].pos[0] = 0;
-        } else if (selectedNodes.length > 1) {
-            const leftMost = Math.min(...selectedNodes.map(node => node.pos[0]));
-            this.alignNodesByProperty(0, leftMost);
+        } else {
+            // 按 X 轴进行分组
+            const groups = this.groupNodesByCoordinate(selectedNodes, 0); // 分组基于X轴坐标
+            groups.forEach(group => {
+                const leftMost = Math.min(...group.map(node => node.pos[0]));
+                group.forEach(node => {
+                    node.pos[0] = leftMost; // 左对齐
+                });
+            });
         }
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
+
     // 右对齐
     alignRight() {
-        const rightMost = Math.max(...this.getSelectedNodes().map(node => node.pos[0] + node.size[0]));
-        this.getSelectedNodes().forEach(node => {
-            node.pos[0] = rightMost - node.size[0];
-        });
+        const selectedNodes = this.getSelectedNodes();
+        if (selectedNodes.length > 0) {
+            // 按 X 轴进行分组
+            const groups = this.groupNodesByCoordinate(selectedNodes, 0); // 分组基于X轴坐标
+            groups.forEach(group => {
+                const rightMost = Math.max(...group.map(node => node.pos[0] + node.size[0]));
+                group.forEach(node => {
+                    node.pos[0] = rightMost - node.size[0]; // 右对齐
+                });
+            });
+        }
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
+
     // 顶部对齐
     alignTop() {
         const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length === 1) {
-            selectedNodes[0].pos[1] = 0;
-        } else if (selectedNodes.length > 1) {
-            const topMost = Math.min(...selectedNodes.map(node => node.pos[1]));
-            this.alignNodesByProperty(1, topMost);
+        if (selectedNodes.length > 0) {
+            // 按 Y 轴进行分组
+            const groups = this.groupNodesByCoordinate(selectedNodes, 1); // 分组基于Y轴坐标
+            groups.forEach(group => {
+                const topMost = Math.min(...group.map(node => node.pos[1]));
+                group.forEach(node => {
+                    node.pos[1] = topMost; // 顶部对齐
+                });
+            });
         }
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 底部对齐
     alignBottom() {
-        const bottomMost = Math.max(...this.getSelectedNodes().map(node => node.pos[1] + node.size[1]));
-        this.getSelectedNodes().forEach(node => {
-            node.pos[1] = bottomMost - node.size[1];
-        });
+        const selectedNodes = this.getSelectedNodes();
+        if (selectedNodes.length > 0) {
+            // 按 Y 轴进行分组
+            const groups = this.groupNodesByCoordinate(selectedNodes, 1); // 分组基于Y轴坐标
+            groups.forEach(group => {
+                const bottomMost = Math.max(...group.map(node => node.pos[1] + node.size[1]));
+                group.forEach(node => {
+                    node.pos[1] = bottomMost - node.size[1]; // 底部对齐
+                });
+            });
+        }
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 水平居中对齐
     alignCenterHorizontally() {
-        const centerY = this.calculateCenter(1);
-        this.getSelectedNodes().forEach(node => {
-            node.pos[1] = centerY - node.size[1] / 2;
-        });
+        const selectedNodes = this.getSelectedNodes();
+        if (selectedNodes.length > 0) {
+            // 按 Y 轴进行分组
+            const groups = this.groupNodesByCoordinate(selectedNodes, 1); // 分组基于Y轴坐标
+            groups.forEach(group => {
+                const centerY = this.calculateCenterInGroup(group, 1); // 计算 Y 轴中心
+                group.forEach(node => {
+                    node.pos[1] = centerY - node.size[1] / 2; // 垂直居中
+                });
+            });
+        }
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 垂直居中对齐
     alignCenterVertically() {
-        const centerX = this.calculateCenter(0);
-        this.getSelectedNodes().forEach(node => {
-            node.pos[0] = centerX - node.size[0] / 2;
-        });
+        const selectedNodes = this.getSelectedNodes();
+        if (selectedNodes.length > 0) {
+            // 按 X 轴进行分组
+            const groups = this.groupNodesByCoordinate(selectedNodes, 0); // 分组基于X轴坐标
+            groups.forEach(group => {
+                const centerX = this.calculateCenterInGroup(group, 0); // 计算 X 轴中心
+                group.forEach(node => {
+                    node.pos[0] = centerX - node.size[0] / 2; // 水平居中
+                });
+            });
+        }
         LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
-    // 计算节点的中心坐标
-    calculateCenter(axis) {
-        const nodes = this.getSelectedNodes();
-        const min = Math.min(...nodes.map(node => node.pos[axis]));
-        const max = Math.max(...nodes.map(node => node.pos[axis] + node.size[axis]));
-        return (min + max) / 2;
+    // 计算组内节点的中心坐标
+    calculateCenterInGroup(group, axis) {
+        const minCoord = Math.min(...group.map(node => node.pos[axis]));
+        const maxCoord = Math.max(...group.map(node => node.pos[axis] + node.size[axis]));
+        return (minCoord + maxCoord) / 2;
     },
 
     // 横向分布
     horizontalDistribution() {
-        this.distributeNodes(0);
+        const nodes = this.getSelectedNodes();
+        const axis = 0;
+        if (nodes.length > 1) {
+            // 按照节点在 axis 轴上的位置（高低）进行排序
+            nodes.sort((a, b) => a.pos[axis] - b.pos[axis]);
+
+            // 获取最小和最大的位置范围
+            const min = Math.min(...nodes.map(node => node.pos[axis]));
+            const max = Math.max(...nodes.map(node => node.pos[axis] + node.size[axis]));
+
+            // 计算节点的总尺寸
+            const totalSize = nodes.reduce((sum, node) => sum + node.size[axis], 0);
+
+            // 计算间距
+            const spacing = (max - min - totalSize) / (nodes.length - 1);
+
+            // 初始化当前分布位置
+            let current = min;
+
+            // 遍历排序后的节点，按顺序分布
+            nodes.forEach(node => {
+                node.pos[axis] = current;  // 设置当前节点位置
+                current += node.size[axis] + spacing;  // 更新下一个节点位置
+            });
+
+            // 重新渲染画布
+            LGraphCanvas.active_canvas.setDirty(true, true);
+        }
     },
 
     // 纵向分布
@@ -427,7 +503,7 @@ const ButtonManager = {
         if (nodes.length > 1) {
             const axis = 1; // Y轴
             const otherAxis = 0; // X轴
-            const tolerance = 20; // 用于将节点分组的容差
+            const tolerance = 100; // 用于将节点分组的容差
             const minSpacing = 20; // 最小间距，保证节点之间至少有 20 像素的间隔
 
             // 用于存储列的数组
@@ -463,10 +539,10 @@ const ButtonManager = {
             // 找到最高列的高度
             const maxColumnHeight = Math.max(...columnHeights);
 
-            // 找到所有列中第一个节点的最小 Y 值，用于对齐第一排
+            // 找到当前所有列中第一个节点的最小 Y 值，用于对齐第一排
             const minFirstNodeY = Math.min(...columns.map(column => column[0].pos[axis]));
 
-            // 对每列进行处理，类似 distributeNodes 方法
+            // 对每列进行处理
             columns.forEach((column, columnIndex) => {
                 if (column.length > 1) {
                     // 按照节点在 Y 轴上的位置（高低）进行排序
@@ -503,10 +579,7 @@ const ButtonManager = {
             // 重新渲染画布
             LGraphCanvas.active_canvas.setDirty(true, true);
         }
-    }
-
-    ,
-
+    },
     // 等宽
     equalWidth() {
         this.equalSize(0);
@@ -526,38 +599,6 @@ const ButtonManager = {
             nodes.forEach(node => {
                 node.size[axis] = maxSize; // 设置所有节点的大小为最大值
             });
-            LGraphCanvas.active_canvas.setDirty(true, true);
-        }
-    },
-
-    // 通用的节点分布方法
-    distributeNodes(axis) {
-        const nodes = this.getSelectedNodes();
-
-        if (nodes.length > 1) {
-            // 按照节点在 axis 轴上的位置（高低）进行排序
-            nodes.sort((a, b) => a.pos[axis] - b.pos[axis]);
-
-            // 获取最小和最大的位置范围
-            const min = Math.min(...nodes.map(node => node.pos[axis]));
-            const max = Math.max(...nodes.map(node => node.pos[axis] + node.size[axis]));
-
-            // 计算节点的总尺寸
-            const totalSize = nodes.reduce((sum, node) => sum + node.size[axis], 0);
-
-            // 计算间距
-            const spacing = (max - min - totalSize) / (nodes.length - 1);
-
-            // 初始化当前分布位置
-            let current = min;
-
-            // 遍历排序后的节点，按顺序分布
-            nodes.forEach(node => {
-                node.pos[axis] = current;  // 设置当前节点位置
-                current += node.size[axis] + spacing;  // 更新下一个节点位置
-            });
-
-            // 重新渲染画布
             LGraphCanvas.active_canvas.setDirty(true, true);
         }
     }
