@@ -37,6 +37,8 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    ps: 按住 Shift 进行拖拽可以对多个选择节点同时进行拖拽。
    ps: Hold Shift to drag and move multiple selected nodes.
 
+
+视频演示：https://space.bilibili.com/15855661?spm_id_from=333.337.search-card.all.click
 <img src="example.gif" width="800">
 
 
