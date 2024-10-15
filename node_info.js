@@ -38,7 +38,7 @@ const ButtonManager = {
                 background: #2b2b2b;
                 padding: 4px;
                 border-radius: 4px;
-                z-index: 999;
+                z-index: 9999;
                 width: 290px;
                 height: 32px;
                 white-space: nowrap; /* 禁止换行，确保按钮在同一行显示 */
@@ -253,14 +253,37 @@ const ButtonManager = {
         document.addEventListener('mousemove', this.onDragging.bind(this));
         document.addEventListener('mouseup', this.onDragEnd.bind(this));
     },
-
     // 拖拽中
     onDragging(e) {
         if (this.isDragging) {
             const deltaX = e.clientX - this.initialX;
             const deltaY = e.clientY - this.initialY;
-            this.buttonContainer.style.left = `${this.dragStartX + deltaX}px`;
-            this.buttonContainer.style.top = `${this.dragStartY + deltaY}px`;
+
+            // 计算新的位置
+            let newLeft = this.dragStartX + deltaX;
+            let newTop = this.dragStartY + deltaY;
+
+            // 获取容器的宽高和屏幕的宽高
+            const containerRect = this.buttonContainer.getBoundingClientRect();
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            // 边缘控制，确保容器不超出屏幕
+            if (newLeft < 0) {
+                newLeft = 0;
+            } else if (newLeft + containerRect.width > windowWidth) {
+                newLeft = windowWidth - containerRect.width;
+            }
+
+            if (newTop < 0) {
+                newTop = 0;
+            } else if (newTop + containerRect.height > windowHeight) {
+                newTop = windowHeight - containerRect.height;
+            }
+
+            // 更新位置
+            this.buttonContainer.style.left = `${newLeft}px`;
+            this.buttonContainer.style.top = `${newTop}px`;
         }
     },
     // 结束拖拽
