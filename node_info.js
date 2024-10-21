@@ -562,9 +562,6 @@ const ButtonManager = {
             // 找到最高列的高度
             const maxColumnHeight = Math.max(...columnHeights);
 
-            // 找到当前所有列中第一个节点的最小 Y 值，用于对齐第一排
-            const minFirstNodeY = Math.min(...columns.map(column => column[0].pos[axis]));
-
             // 对每列进行处理
             columns.forEach((column, columnIndex) => {
                 if (column.length > 1) {
@@ -581,13 +578,19 @@ const ButtonManager = {
                     let spacing = (maxColumnHeight - totalSize) / (column.length - 1);
                     spacing = Math.max(spacing, minSpacing);  // 保证间距不小于最小间距
 
-                    // 初始化当前分布位置，确保每列第一个节点的 Y 轴与最小 Y 对齐
-                    let currentY = minFirstNodeY;
+                    // 初始化当前分布位置，保持第一个节点位置不变
+                    let currentY = column[0].pos[axis];  // 将第一个节点的位置作为起点
 
                     // 分布节点
                     column.forEach((node, idx) => {
-                        node.pos[axis] = currentY;  // 设置当前节点位置
-                        currentY += node.size[axis] + spacing;  // 更新下一个节点位置
+                        if (idx === 0) {
+                            // 第一个节点位置保持不变
+                            currentY += node.size[axis] + spacing;
+                        } else {
+                            // 设置当前节点位置
+                            node.pos[axis] = currentY;
+                            currentY += node.size[axis] + spacing;
+                        }
 
                         // 对齐 X 轴位置（所有节点在列内对齐）
                         node.pos[otherAxis] = column[0].pos[otherAxis];
@@ -595,7 +598,6 @@ const ButtonManager = {
                 } else if (column.length === 1) {
                     // 单个节点时，保持第一个节点与最小 Y 位置对齐
                     const node = column[0];
-                    node.pos[axis] = minFirstNodeY;  // 使单节点列的第一个节点与其他列对齐
                 }
             });
 
