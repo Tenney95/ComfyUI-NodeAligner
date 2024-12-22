@@ -25,6 +25,9 @@ const ButtonManager = {
     init() {
         if (this.isInitialized) return; // 如果已经初始化过，不再重复创建
 
+        this.boundOnDragging = this.onDragging.bind(this);
+        this.boundOnDragEnd = this.onDragEnd.bind(this);
+
         // 使用 CSS 定义 hover 效果和所有样式
         const style = document.createElement('style');
         style.textContent = `
@@ -240,18 +243,15 @@ const ButtonManager = {
     },
     // 开始拖拽
     onDragStart(e) {
-        if (!e.target.classList.contains('divider')) {
-            return;  // 确保只在点击分割线时开始拖拽
-        }
+        if (!e.target.classList.contains('divider')) return;
         this.isDragging = true;
         this.initialX = e.clientX;
         this.initialY = e.clientY;
         this.dragStartX = this.buttonContainer.offsetLeft;
         this.dragStartY = this.buttonContainer.offsetTop;
 
-        // 临时添加事件监听器
-        document.addEventListener('mousemove', this.onDragging.bind(this));
-        document.addEventListener('mouseup', this.onDragEnd.bind(this));
+        document.addEventListener('mousemove', this.boundOnDragging);
+        document.addEventListener('mouseup', this.boundOnDragEnd);
     },
     // 拖拽中
     onDragging(e) {
@@ -333,20 +333,30 @@ const ButtonManager = {
     },
     // 恢复位置
     restorePosition() {
-        const savedPosition = JSON.parse(localStorage.getItem('NodeAlignerButtonContainerPosition'));
-        if (savedPosition) {
-            this.buttonContainer.style.top = savedPosition.top;
-            this.buttonContainer.style.bottom = savedPosition.bottom;
-            this.buttonContainer.style.left = savedPosition.left;
-            this.buttonContainer.style.right = savedPosition.right;
-        } else {
-            // 如果没有保存的位置信息，则使用默认位置
-            this.buttonContainer.style.top = '20px';
-            this.buttonContainer.style.right = '20px';
+        try {
+            const savedPosition = JSON.parse(localStorage.getItem('NodeAlignerButtonContainerPosition'));
+            if (savedPosition && typeof savedPosition === 'object') {
+                this.buttonContainer.style.top = savedPosition.top || '20px';
+                this.buttonContainer.style.bottom = savedPosition.bottom || 'unset';
+                this.buttonContainer.style.left = savedPosition.left || 'unset';
+                this.buttonContainer.style.right = savedPosition.right || '20px';
+            } else {
+                this.setDefaultPosition();
+            }
+        } catch (e) {
+            console.warn('Failed to parse saved position:', e);
+            this.setDefaultPosition();
         }
+    },
+    setDefaultPosition() {
+        this.buttonContainer.style.top = '20px';
+        this.buttonContainer.style.right = '20px';
+        this.buttonContainer.style.bottom = 'unset';
+        this.buttonContainer.style.left = 'unset';
     },
     // 获取当前选中的节点
     getSelectedNodes() {
+        if (!LGraphCanvas.active_canvas) return [];
         const selectedNodesObj = LGraphCanvas.active_canvas.selected_nodes;
         return selectedNodesObj ? Object.values(selectedNodesObj) : [];
     },
@@ -640,7 +650,7 @@ function pollForCanvas() {
                 const selectedNodes = ButtonManager.getSelectedNodes();
                 if (selectedNodes.length >= 2) {
                     ButtonManager.show();
-                    ButtonManager.setPosition(event.layerX, event.layerY - 40);
+                    ButtonManager.setPosition(event.layerX - 240, event.layerY - 20);
                 } else {
                     ButtonManager.hide();
                 }
