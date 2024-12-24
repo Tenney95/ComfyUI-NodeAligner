@@ -19,7 +19,8 @@ const ButtonManager = {
     dragStartX: 0, // 拖拽开始时的X
     dragStartY: 0, // 拖拽开始时的Y
     isDragging: false, // 检查是否正在拖拽
-    hasShownTooltip: false,
+    hasShownTooltip: false, // 检查是否已经显示过提示
+    isShow: true, // 是否显示按钮
 
     // 初始化按钮
     init() {
@@ -119,7 +120,10 @@ const ButtonManager = {
                 button.id = btn.id;
                 button.classList.add('custom-button');
                 button.innerHTML = btn.svg;
-                button.addEventListener('click', btn.action);
+                button.addEventListener('click', (event) => {
+                    btn.action.call(this, event);
+                    event.stopPropagation();
+                });
                 this.buttonContainer.appendChild(button);
             }
         });
@@ -230,11 +234,13 @@ const ButtonManager = {
     },
     // 显示按钮
     show() {
+        this.isShow = true;
         this.buttonContainer.style.display = 'flex'; // 显示按钮容器
     },
 
     // 隐藏按钮
     hide() {
+        this.isShow = false;
         this.buttonContainer.style.display = 'none'; // 隐藏按钮容器
     },
     setPosition(x, y) {
@@ -243,7 +249,7 @@ const ButtonManager = {
     },
     // 开始拖拽
     onDragStart(e) {
-        if (!e.target.classList.contains('divider')) return;
+        if (!e.target.classList.contains('divider') || this.isDragging) return;
         this.isDragging = true;
         this.initialX = e.clientX;
         this.initialY = e.clientY;
@@ -360,29 +366,46 @@ const ButtonManager = {
         const selectedNodesObj = LGraphCanvas.active_canvas.selected_nodes;
         return selectedNodesObj ? Object.values(selectedNodesObj) : [];
     },
-
     // 辅助函数：按照 X 或 Y 坐标分组
-    groupNodesByCoordinate(nodes, axis, tolerance = 100) {
+    groupNodesByCoordinate(nodes, axis, tolerance = 1000) {
+        if (nodes.length < 4) {
+            // 当选中节点小于 4 个时，不进行分组，直接返回包含所有节点的单个组
+            return [nodes];
+        }
+
         const groups = [];
+        const otherAxis = 1 - axis; // 获取另一个轴 (0 -> 1, 1 -> 0)
 
-        nodes.forEach(node => {
-            let foundGroup = null;
+        // 1. 基于主轴（axis）对节点进行排序
+        nodes.sort((a, b) => a.pos[axis] - b.pos[axis]);
 
-            for (let group of groups) {
-                const groupCoord = group[0].pos[axis];
+        // 2. 计算主轴上的间距分布
+        const gaps = [];
+        for (let i = 1; i < nodes.length; i++) {
+            gaps.push(nodes[i].pos[axis] - (nodes[i - 1].pos[axis] + nodes[i - 1].size[axis]));
+        }
 
-                if (Math.abs(groupCoord - node.pos[axis]) <= tolerance) {
-                    foundGroup = group;
-                    break;
-                }
-            }
+        // 3. 使用统计方法确定分组的阈值（例如，平均间距加上标准差）
+        const avgGap = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
+        const stdDevGap = Math.sqrt(gaps.reduce((sum, gap) => sum + Math.pow(gap - avgGap, 2), 0) / gaps.length);
+        const threshold = avgGap + stdDevGap; // 阈值设置为平均间距加上一个标准差
 
-            if (foundGroup) {
-                foundGroup.push(node);
+        // 4. 根据间距和副轴（otherAxis）上的位置进行分组
+        let currentGroup = [nodes[0]];
+        for (let i = 1; i < nodes.length; i++) {
+            const gap = nodes[i].pos[axis] - (nodes[i - 1].pos[axis] + nodes[i - 1].size[axis]);
+            const otherAxisDiff = Math.abs(nodes[i].pos[otherAxis] - nodes[i - 1].pos[otherAxis]);
+
+            if (gap <= threshold && otherAxisDiff <= tolerance) {
+                // 如果间距小于阈值且副轴上的差异小于容差，则将节点添加到当前组
+                currentGroup.push(nodes[i]);
             } else {
-                groups.push([node]);
+                // 否则，开始一个新的组
+                groups.push(currentGroup);
+                currentGroup = [nodes[i]];
             }
-        });
+        }
+        groups.push(currentGroup); // 添加最后一组
 
         return groups;
     },
