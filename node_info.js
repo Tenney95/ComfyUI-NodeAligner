@@ -99,6 +99,7 @@ const ButtonManager = {
         // 从 localStorage 恢复位置
         this.restorePosition();
 
+
         document.body.appendChild(this.buttonContainer);
 
         // 创建按钮并分配功能
@@ -138,7 +139,6 @@ const ButtonManager = {
         this.buttonContainer.appendChild(tooltip);
 
         // 从 localStorage 检查是否已经显示过提示
-
         if (!this.hasShownTooltip) {
             // 如果还没有显示过提示，设置悬停事件
             this.buttonContainer.addEventListener('mouseenter', () => {
@@ -352,6 +352,30 @@ const ButtonManager = {
         } catch (e) {
             console.warn('Failed to parse saved position:', e);
             this.setDefaultPosition();
+        }
+
+        // ===== 在这里检测是否超出屏幕边界 =====
+        const containerRect = this.buttonContainer.getBoundingClientRect();
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        if (
+            containerRect.left < 0 ||
+            containerRect.top < 0 ||
+            containerRect.right > windowWidth ||
+            containerRect.bottom > windowHeight
+        ) {
+            console.log('NodeAligner位置已超出屏幕范围，重置为默认位置');
+            // 调用setDefaultPosition重置位置
+            this.setDefaultPosition();
+
+            // 保存默认位置到 localStorage，确保下次进入不会越界
+            localStorage.setItem('NodeAlignerButtonContainerPosition', JSON.stringify({
+                top: this.buttonContainer.style.top,
+                left: this.buttonContainer.style.left,
+                right: this.buttonContainer.style.right,
+                bottom: this.buttonContainer.style.bottom
+            }));
         }
     },
     setDefaultPosition() {
