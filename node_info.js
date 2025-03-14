@@ -26,6 +26,8 @@ const ButtonManager = {
     init() {
         if (this.isInitialized) return; // 如果已经初始化过，不再重复创建
 
+        
+        this.boundOnDragStart = this.onDragStart.bind(this);
         this.boundOnDragging = this.onDragging.bind(this);
         this.boundOnDragEnd = this.onDragEnd.bind(this);
 
@@ -163,10 +165,6 @@ const ButtonManager = {
         } else {
             this.show()
         }
-
-        this.boundOnDragStart = this.onDragStart.bind(this);
-        this.boundOnDragging = this.onDragging.bind(this);
-        this.boundOnDragEnd = this.onDragEnd.bind(this);
     },
 
     // 获取按钮配置
@@ -348,6 +346,8 @@ const ButtonManager = {
         }
         document.removeEventListener('mousemove', this.boundOnDragging);
         document.removeEventListener('mouseup', this.boundOnDragEnd);
+        
+        this.isInitialized = false;
     },
     // 恢复位置
     restorePosition() {
