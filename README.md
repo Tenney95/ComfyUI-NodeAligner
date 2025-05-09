@@ -48,3 +48,4 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    ```bash
    git clone https://github.com/Tenney95/ComfyUI-NodeAligner.git
    ```
+2. 将 `ComfyUI-NodeAligner` 文件夹复制到 `ComfyUI/custom_nodes` 目录下。  
