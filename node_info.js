@@ -26,6 +26,8 @@ const ButtonManager = {
     init() {
         if (this.isInitialized) return; // 如果已经初始化过，不再重复创建
 
+        
+        this.boundOnDragStart = this.onDragStart.bind(this);
         this.boundOnDragging = this.onDragging.bind(this);
         this.boundOnDragEnd = this.onDragEnd.bind(this);
 
@@ -110,9 +112,9 @@ const ButtonManager = {
                 const divider = document.createElement('div');
                 divider.classList.add('divider');
                 // 添加拖拽功能
-                divider.addEventListener('mousedown', this.onDragStart.bind(this));
-                document.addEventListener('mousemove', this.onDragging.bind(this));
-                document.addEventListener('mouseup', this.onDragEnd.bind(this));
+                divider.addEventListener('mousedown', this.boundOnDragStart);
+                document.addEventListener('mousemove', this.boundOnDragging);
+                document.addEventListener('mouseup', this.boundOnDragEnd);
 
                 this.buttonContainer.appendChild(divider);
             } else {
@@ -296,8 +298,8 @@ const ButtonManager = {
     onDragEnd() {
         this.isDragging = false;
         // 移除事件监听器
-        document.removeEventListener('mousemove', this.onDragging);
-        document.removeEventListener('mouseup', this.onDragEnd);
+        document.removeEventListener('mousemove', this.boundOnDragging);
+        document.removeEventListener('mouseup', this.boundOnDragEnd);
 
         // 获取按钮容器的位置信息
         const rect = this.buttonContainer.getBoundingClientRect();
@@ -336,6 +338,16 @@ const ButtonManager = {
 
         // 保存位置到 localStorage
         localStorage.setItem('NodeAlignerButtonContainerPosition', JSON.stringify({ top, left, right, bottom }));
+    },
+    destroy() {
+        const divider = this.buttonContainer.querySelector('.divider');
+        if (divider) {
+            divider.removeEventListener('mousedown', this.boundOnDragStart);
+        }
+        document.removeEventListener('mousemove', this.boundOnDragging);
+        document.removeEventListener('mouseup', this.boundOnDragEnd);
+        
+        this.isInitialized = false;
     },
     // 恢复位置
     restorePosition() {
