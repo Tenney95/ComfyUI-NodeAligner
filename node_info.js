@@ -21,33 +21,46 @@ const ButtonManager = {
     isDragging: false, // 检查是否正在拖拽
     hasShownTooltip: false, // 检查是否已经显示过提示
     isShow: true, // 是否显示按钮
-
     // 初始化按钮
     init() {
-        if (this.isInitialized) return; // 如果已经初始化过，不再重复创建
+        if (this.isInitialized) return;
 
-        
         this.boundOnDragStart = this.onDragStart.bind(this);
         this.boundOnDragging = this.onDragging.bind(this);
         this.boundOnDragEnd = this.onDragEnd.bind(this);
 
-        // 使用 CSS 定义 hover 效果和所有样式
+        // Create button container
+        this.buttonContainer = document.createElement('div');
+        this.buttonContainer.id = 'alignment-buttons';
+
+        // Create shadow root
+        const shadow = this.buttonContainer.attachShadow({ mode: 'open' });
+
+        // Create main wrapper to maintain structure
+        const wrapper = document.createElement('div');
+        wrapper.id = 'alignment-buttons-wrapper';
+        wrapper.style.cssText = 'display: flex; width: 100%; height: 100%;';
+
+        // Create style element for shadow DOM
         const style = document.createElement('style');
         style.textContent = `
-            #alignment-buttons {
+            :host {
                 position: absolute;
                 top: 20px;
                 right: 10px;
                 left: unset;
                 bottom: unset;
-                display: flex;
+                display: block;
                 background: #2b2b2b;
                 padding: 4px;
                 border-radius: 4px;
                 z-index: 9999;
                 width: 290px;
                 height: 32px;
-                white-space: nowrap; /* 禁止换行，确保按钮在同一行显示 */
+            }
+            #alignment-buttons-wrapper {
+                display: flex;
+                white-space: nowrap;
             }
             .custom-button {
                 width: 25px;
@@ -76,7 +89,6 @@ const ButtonManager = {
             .divider:active {
                 cursor: grabbing;
             }
-            /* 提示样式 */
             #tooltip {
                 position: absolute;
                 bottom: -20px;
@@ -90,35 +102,55 @@ const ButtonManager = {
                 white-space: nowrap;
                 font-size: 12px;
             }
-            
+            #context-menu {
+                position: fixed;
+                background: #2b2b2b;
+                border-radius: 4px;
+                padding: 5px;
+                z-index: 10000;
+                display: none;
+            }
+            #context-menu button {
+                display: block;
+                width: 100%;
+                padding: 5px 10px;
+                background: none;
+                border: none;
+                color: white;
+                cursor: pointer;
+                text-align: left;
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            #context-menu button:hover {
+                background-color: #555555;
+            }
+            .custom-button svg {
+                width: 100%;
+                height: 100%;
+            }
         `;
-        document.head.appendChild(style);
 
-        // 创建按钮容器
-        this.buttonContainer = document.createElement('div');
-        this.buttonContainer.id = 'alignment-buttons';
+        // Append style and wrapper to shadow DOM
+        shadow.appendChild(style);
+        shadow.appendChild(wrapper);
 
-        // 从 localStorage 恢复位置
+        // From localStorage restore position
         this.restorePosition();
-
 
         document.body.appendChild(this.buttonContainer);
 
-        // 创建按钮并分配功能
+        // Create buttons and assign functionality
         const buttons = this.getButtons();
         buttons.forEach(btn => {
             if (btn.type === 'divider') {
-                // 创建分割线
                 const divider = document.createElement('div');
                 divider.classList.add('divider');
-                // 添加拖拽功能
-                divider.addEventListener('mousedown', this.boundOnDragStart);
-                document.addEventListener('mousemove', this.boundOnDragging);
-                document.addEventListener('mouseup', this.boundOnDragEnd);
-
-                this.buttonContainer.appendChild(divider);
+                divider.addEventListener('mousedown', this.onDragStart.bind(this));
+                document.addEventListener('mousemove', this.onDragging.bind(this));
+                document.addEventListener('mouseup', this.onDragEnd.bind(this));
+                wrapper.appendChild(divider);
             } else {
-                // 创建按钮
                 const button = document.createElement('button');
                 button.id = btn.id;
                 button.classList.add('custom-button');
@@ -127,22 +159,51 @@ const ButtonManager = {
                     btn.action.call(this, event);
                     event.stopPropagation();
                 });
-                this.buttonContainer.appendChild(button);
+                wrapper.appendChild(button);
             }
         });
 
-        this.isInitialized = true; // 标记已经初始化
-        this.showContextMenu();
-
-        // 创建工具提示元素
+        // Create tooltip
         const tooltip = document.createElement('div');
         tooltip.id = 'tooltip';
-        tooltip.textContent = '右键可选按钮呈现模式';  // 工具提示的内容
-        this.buttonContainer.appendChild(tooltip);
+        tooltip.textContent = '右键可选按钮呈现模式';
+        wrapper.appendChild(tooltip);
 
-        // 从 localStorage 检查是否已经显示过提示
+        // Create context menu
+        const contextMenu = document.createElement('div');
+        contextMenu.id = 'context-menu';
+        contextMenu.innerHTML = `
+            <button id="pin-mode">驻留</button>
+            <button id="toggle-on-select">选中后显示</button>
+        `;
+        wrapper.appendChild(contextMenu);
+        this.contextMenu = contextMenu;
+
+        // Bind context menu events
+        this.buttonContainer.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = `${event.clientX}px`;
+            contextMenu.style.top = `${event.clientY}px`;
+        });
+
+        // Click handlers for context menu
+        contextMenu.querySelector('#pin-mode').addEventListener('click', () => {
+            contextMenu.style.display = 'none';
+            this.isPermanent = true;
+            localStorage.setItem('NodeAlignerIsPermanent', '1');
+            this.restorePosition();
+        });
+
+        contextMenu.querySelector('#toggle-on-select').addEventListener('click', () => {
+            this.hide();
+            contextMenu.style.display = 'none';
+            this.isPermanent = false;
+            localStorage.setItem('NodeAlignerIsPermanent', '0');
+        });
+
+        // Handle tooltip display
         if (!this.hasShownTooltip) {
-            // 如果还没有显示过提示，设置悬停事件
             this.buttonContainer.addEventListener('mouseenter', () => {
                 if (!this.hasShownTooltip) {
                     setTimeout(() => {
@@ -153,18 +214,20 @@ const ButtonManager = {
             });
 
             this.buttonContainer.addEventListener('mouseleave', () => {
-                // 删除tooltip 当鼠标离开时隐藏提示
-                tooltip.remove();
+                tooltip.style.display = 'none';
             });
         }
 
+        // Initialize visibility state
         let isPermanent = localStorage.getItem('NodeAlignerIsPermanent');
         if (isPermanent) {
-            this.isPermanent = localStorage.getItem('NodeAlignerIsPermanent') == '1';
+            this.isPermanent = isPermanent === '1';
             this.isPermanent ? this.show() : this.hide();
         } else {
-            this.show()
+            this.show();
         }
+
+        this.isInitialized = true;
     },
 
     // 获取按钮配置
@@ -346,7 +409,7 @@ const ButtonManager = {
         }
         document.removeEventListener('mousemove', this.boundOnDragging);
         document.removeEventListener('mouseup', this.boundOnDragEnd);
-        
+
         this.isInitialized = false;
     },
     // 恢复位置
