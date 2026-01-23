@@ -56,7 +56,7 @@ const ButtonManager = {
                 background: #2b2b2b;
                 padding: 4px;
                 border-radius: 4px;
-                z-index: 9999;
+                z-index: 9999999999;
                 width: 290px;
                 height: 32px;
             }
