@@ -46,6 +46,9 @@ const ButtonManager = {
         // Create style element for shadow DOM
         const style = document.createElement('style');
         style.textContent = `
+            #alignment-buttons {
+                z-index: 999999999;
+            }
             :host {
                 position: absolute;
                 top: 20px;
@@ -56,7 +59,7 @@ const ButtonManager = {
                 background: #2b2b2b;
                 padding: 4px;
                 border-radius: 4px;
-                z-index: 9999;
+                z-index: 999999999;
                 width: 290px;
                 height: 32px;
             }
