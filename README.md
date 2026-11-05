@@ -15,8 +15,8 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
   Distribute nodes evenly across horizontal or vertical space.
 
 ## 使用方法 Method of Application
-1. 选择单个节点，左对齐和顶部对齐会使节点的 `left` 和 `top` 归零。  
-   Select a single node; left and top alignment will reset the node's `left` and `top` to zero.
+1. 选中节点后使用工具栏进行对齐、分布或统一尺寸。单个节点对齐时保持当前位置。
+   Select nodes and use the toolbar to align, distribute, or equalize their sizes. Aligning a single node preserves its position.
 
 2. 按住 Shift 键或 Ctrl 键，点选多个节点，点击按钮，即可完成对齐和分布。  
    Hold the Shift or Ctrl key, select multiple nodes, and click the button to complete alignment and distribution.
@@ -24,8 +24,8 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
 3. 点击空白处取消选择。  
    Click on the blank space to deselect.
 
-4. 如果没选中任何节点的情况下，点击左对齐这画布返回“0、0”坐标。 
-   If no nodes are selected, clicking left alignment will return the canvas to "0,0" coordinates.
+4. 未选中节点时，点击左对齐会恢复预设起始视图和 100% 缩放。
+   With no nodes selected, left alignment restores the preset starting view at 100% zoom.
 
 5. 点中对齐按钮中间的黑色分割线可实现组件的拖拽，进行移动。
    The black division line in the center of the right alignment button allows for component dragging and movement.
@@ -49,3 +49,23 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    git clone https://github.com/Tenney95/ComfyUI-NodeAligner.git
    ```
 2. 将 `ComfyUI-NodeAligner` 文件夹复制到 `ComfyUI/custom_nodes` 目录下。  
+
+## 1.0.1 兼容更新 Compatibility update
+
+- 接入 ComfyUI 扩展生命周期，优先使用 `selectedItems`，保留旧前端选区兼容。
+- 对齐、分布和尺寸修改接入撤销/重做；调整尺寸调用节点的 `setSize`，同步控件布局。
+- 修复重复拖动监听、普通点击覆盖驻留位置、临时浮栏定位和监听清理。
+- 保留原有分组、分布和尺寸取整规则，按钮增加中文提示。
+
+Uses ComfyUI extension setup and modern selection APIs, records undoable edits, updates widget layouts through `setSize`, and fixes toolbar dragging and positioning while preserving existing layout rules.
+
+2026-11-05 验证：本机前端 **1.57.6** 的传统节点和 **Nodes 2.0** 均已实测多选浮栏、顶部对齐、等宽及单次撤销；另已核对官方 [1.60.0](https://github.com/Comfy-Org/ComfyUI_frontend/releases/tag/v1.60.0) 的相关接口，尚未在该版本完整环境实测。
+
+验证命令（仅需 Node.js，无额外依赖）：
+
+```bash
+node --check node_info.js
+node tests/node_info.test.cjs
+```
+
+更新后先保存工作流，再刷新 ComfyUI 页面。

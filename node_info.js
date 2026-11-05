@@ -1,3 +1,5 @@
+import { app } from "../../scripts/app.js";
+
 const alignBottomSvg = `<svg t="1725534360155" class="icon" viewBox="0 0 1170 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1662" width="100%"><path d="M1170.285714 987.428571a36.571429 36.571429 0 0 0-36.571428-36.571428H36.571429a36.571429 36.571429 0 0 0 0 73.142857h1097.142857a36.571429 36.571429 0 0 0 36.571428-36.571429z m-219.428571-146.285714v-512a36.571429 36.571429 0 0 0-36.571429-36.571428h-219.428571a36.571429 36.571429 0 0 0-36.571429 36.571428v512a36.571429 36.571429 0 0 0 36.571429 36.571429h219.428571a36.571429 36.571429 0 0 0 36.571429-36.571429z m-438.857143 0V36.571429a36.571429 36.571429 0 0 0-36.571429-36.571429h-219.428571a36.571429 36.571429 0 0 0-36.571429 36.571429v804.571428a36.571429 36.571429 0 0 0 36.571429 36.571429h219.428571a36.571429 36.571429 0 0 0 36.571429-36.571429z" fill="#666666" p-id="1663"></path></svg>`;
 const alignCenterHorizontallySvg = `<svg t="1725534379860" class="icon" viewBox="0 0 1243 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2250" width="100%"><path d="M548.571429 472.356571h146.285714V231.643429a36.571429 36.571429 0 0 1 36.571428-36.571429h219.428572a36.571429 36.571429 0 0 1 36.571428 36.571429v240.713142h179.785143a39.643429 39.643429 0 0 1 0 79.286858H987.428571v240.713142a36.571429 36.571429 0 0 1-36.571428 36.571429h-219.428572a36.571429 36.571429 0 0 1-36.571428-36.571429V551.643429h-146.285714V950.857143a36.571429 36.571429 0 0 1-36.571429 36.571428H292.571429a36.571429 36.571429 0 0 1-36.571429-36.571428V551.643429H76.214857a39.643429 39.643429 0 1 1 0-79.286858H256V73.142857A36.571429 36.571429 0 0 1 292.571429 36.571429h219.428571a36.571429 36.571429 0 0 1 36.571429 36.571428v399.213714z" fill="#666666" p-id="2251"></path></svg>`;
 const alignCenterVerticallySvg = `<svg t="1725534363707" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1809" width="100%"><path d="M477.312 576V448H266.688a32 32 0 0 1-32-32v-192a32 32 0 0 1 32-32h210.624V34.688a34.688 34.688 0 0 1 69.376 0V192h210.624a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32H546.688v128H896a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32H546.688v157.312a34.688 34.688 0 1 1-69.376 0V832H128a32 32 0 0 1-32-32v-192A32 32 0 0 1 128 576h349.312z" fill="#666666" p-id="1810"></path></svg>`;
@@ -30,6 +32,12 @@ const ButtonManager = {
         this.boundOnDragStart = this.onDragStart.bind(this);
         this.boundOnDragging = this.onDragging.bind(this);
         this.boundOnDragEnd = this.onDragEnd.bind(this);
+        this.boundOnSelectionChange = this.onSelectionChange.bind(this);
+        this.boundOnDocumentPointerDown = (event) => {
+            if (!event.composedPath().includes(this.buttonContainer)) {
+                this.contextMenu.style.display = 'none';
+            }
+        };
 
         // Create button container
         this.buttonContainer = document.createElement('div');
@@ -50,7 +58,7 @@ const ButtonManager = {
                 z-index: 999999999;
             }
             :host {
-                position: absolute;
+                position: fixed;
                 top: 20px;
                 right: 10px;
                 left: unset;
@@ -140,10 +148,8 @@ const ButtonManager = {
         shadow.appendChild(style);
         shadow.appendChild(wrapper);
 
-        // From localStorage restore position
-        this.restorePosition();
-
         document.body.appendChild(this.buttonContainer);
+        this.restorePosition();
 
         // Create buttons and assign functionality
         const buttons = this.getButtons();
@@ -151,17 +157,18 @@ const ButtonManager = {
             if (btn.type === 'divider') {
                 const divider = document.createElement('div');
                 divider.classList.add('divider');
-                divider.addEventListener('mousedown', this.onDragStart.bind(this));
-                document.addEventListener('mousemove', this.onDragging.bind(this));
-                document.addEventListener('mouseup', this.onDragEnd.bind(this));
+                divider.addEventListener('mousedown', this.boundOnDragStart);
                 wrapper.appendChild(divider);
             } else {
                 const button = document.createElement('button');
                 button.id = btn.id;
+                button.type = 'button';
+                button.title = btn.title;
+                button.setAttribute('aria-label', btn.title);
                 button.classList.add('custom-button');
                 button.innerHTML = btn.svg;
                 button.addEventListener('click', (event) => {
-                    btn.action.call(this, event);
+                    this.runAction(btn.action, event);
                     event.stopPropagation();
                 });
                 wrapper.appendChild(button);
@@ -198,6 +205,7 @@ const ButtonManager = {
             this.isPermanent = true;
             localStorage.setItem('NodeAlignerIsPermanent', '1');
             this.restorePosition();
+            this.show();
         });
 
         contextMenu.querySelector('#toggle-on-select').addEventListener('click', () => {
@@ -211,7 +219,7 @@ const ButtonManager = {
         if (!this.hasShownTooltip) {
             this.buttonContainer.addEventListener('mouseenter', () => {
                 if (!this.hasShownTooltip) {
-                    setTimeout(() => {
+                    this.tooltipTimer = setTimeout(() => {
                         tooltip.style.display = 'block';
                         this.hasShownTooltip = true;
                     }, 1000);
@@ -219,6 +227,7 @@ const ButtonManager = {
             });
 
             this.buttonContainer.addEventListener('mouseleave', () => {
+                clearTimeout(this.tooltipTimer);
                 tooltip.style.display = 'none';
             });
         }
@@ -232,6 +241,8 @@ const ButtonManager = {
             this.show();
         }
 
+        document.addEventListener('pointerup', this.boundOnSelectionChange, true);
+        document.addEventListener('pointerdown', this.boundOnDocumentPointerDown, true);
         this.isInitialized = true;
     },
 
@@ -239,70 +250,34 @@ const ButtonManager = {
     getButtons() {
         return [
             /* 左对齐 */
-            { id: 'alignLeft', svg: alignLeftSvg, action: this.alignLeft.bind(this) },
+            { id: 'alignLeft', title: '左对齐 / 未选择时重置视图', svg: alignLeftSvg, action: this.alignLeft.bind(this) },
             /* 竖向居中对齐 */
-            { id: 'alignCenterVertically', svg: alignCenterVerticallySvg, action: this.alignCenterVertically.bind(this) },
+            { id: 'alignCenterVertically', title: '水平居中', svg: alignCenterVerticallySvg, action: this.alignCenterVertically.bind(this) },
             /* 右对齐 */
-            { id: 'alignRight', svg: alignRightSvg, action: this.alignRight.bind(this) },
+            { id: 'alignRight', title: '右对齐', svg: alignRightSvg, action: this.alignRight.bind(this) },
             // 分割线
             { type: 'divider' },
             /* 顶部对齐 */
-            { id: 'alignTop', svg: alignTopSvg, action: this.alignTop.bind(this) },
+            { id: 'alignTop', title: '顶部对齐', svg: alignTopSvg, action: this.alignTop.bind(this) },
             /* 横向居中对齐 */
-            { id: 'alignCenterHorizontally', svg: alignCenterHorizontallySvg, action: this.alignCenterHorizontally.bind(this) },
+            { id: 'alignCenterHorizontally', title: '垂直居中', svg: alignCenterHorizontallySvg, action: this.alignCenterHorizontally.bind(this) },
             /* 底部对齐 */
-            { id: 'alignBottom', svg: alignBottomSvg, action: this.alignBottom.bind(this) },
+            { id: 'alignBottom', title: '底部对齐', svg: alignBottomSvg, action: this.alignBottom.bind(this) },
             // 分割线
             { type: 'divider' },
             /* 横向分布 */
-            { id: 'horizontalDistribution', svg: horizontalDistributionSvg, action: this.horizontalDistribution.bind(this) },
+            { id: 'horizontalDistribution', title: '水平分布', svg: horizontalDistributionSvg, action: this.horizontalDistribution.bind(this) },
             /* 竖向分布 */
-            { id: 'verticalDistribution', svg: verticalDistributionSvg, action: this.verticalDistribution.bind(this) },
+            { id: 'verticalDistribution', title: '垂直分布', svg: verticalDistributionSvg, action: this.verticalDistribution.bind(this) },
             // 分割线
             { type: 'divider' },
             /* 等宽 */
-            { id: 'equalWidth', svg: equalWidthSvg, action: this.equalWidth.bind(this) },
-            { id: 'equalMinWidth', svg: equalWidth2Svg, action: this.equalMinWidth.bind(this) },
+            { id: 'equalWidth', title: '等宽（最大值）', svg: equalWidthSvg, action: this.equalWidth.bind(this) },
+            { id: 'equalMinWidth', title: '等宽（最小值）', svg: equalWidth2Svg, action: this.equalMinWidth.bind(this) },
             /* 等高 */
-            { id: 'equalHeight', svg: equalHeightSvg, action: this.equalHeight.bind(this) },
-            { id: 'equalMinHeight', svg: equalHeight2Svg, action: this.equalMinHeight.bind(this) },
+            { id: 'equalHeight', title: '等高（最大值）', svg: equalHeightSvg, action: this.equalHeight.bind(this) },
+            { id: 'equalMinHeight', title: '等高（最小值）', svg: equalHeight2Svg, action: this.equalMinHeight.bind(this) },
         ];
-    },
-    // 显示右键菜单
-    showContextMenu() {
-        // 创建右键菜单元素
-        this.contextMenu = document.createElement('div');
-        this.contextMenu.id = 'context-menu';
-        this.contextMenu.style.display = 'none'; // 初始设置为不显示
-        this.contextMenu.innerHTML = `
-            <button id="pin-mode">驻留</button>
-            <button id="toggle-on-select">选中后显示</button>
-        `;
-        this.buttonContainer.appendChild(this.contextMenu);
-
-        // 绑定右键菜单显示事件
-        this.buttonContainer.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            this.contextMenu.style.display = 'block';
-            this.contextMenu.style.left = `${event.pageX}px`;
-            this.contextMenu.style.top = `${event.pageY}px`;
-        });
-
-        // 绑定菜单项的点击事件
-        this.contextMenu.querySelector('#pin-mode').addEventListener('click', () => {
-            // 实现固定模式的逻辑
-            this.contextMenu.style.display = 'none'; // 隐藏右键菜
-            this.isPermanent = true;
-            localStorage.setItem('NodeAlignerIsPermanent', '1');
-            this.restorePosition();
-        });
-        this.contextMenu.querySelector('#toggle-on-select').addEventListener('click', () => {
-            // 实现选中后显示模式的逻辑
-            this.buttonContainer.style.display = 'none'; // 默认不显示按钮容器
-            this.contextMenu.style.display = 'none'; // 隐藏右键菜单
-            this.isPermanent = false;
-            localStorage.setItem('NodeAlignerIsPermanent', '0');
-        });
     },
     // 显示按钮
     show() {
@@ -316,17 +291,37 @@ const ButtonManager = {
         this.buttonContainer.style.display = 'none'; // 隐藏按钮容器
     },
     setPosition(x, y) {
-        this.buttonContainer.style.left = `${x}px`;
-        this.buttonContainer.style.top = `${y}px`;
+        const rect = this.buttonContainer.getBoundingClientRect();
+        this.buttonContainer.style.right = 'unset';
+        this.buttonContainer.style.bottom = 'unset';
+        this.buttonContainer.style.left = `${Math.max(0, Math.min(x, window.innerWidth - rect.width))}px`;
+        this.buttonContainer.style.top = `${Math.max(0, Math.min(y, window.innerHeight - rect.height))}px`;
+    },
+    onSelectionChange(event) {
+        if (this.isPermanent || event.composedPath().includes(this.buttonContainer)) return;
+        const canvas = app.canvas?.canvas;
+        if (!canvas?.parentElement?.contains(event.target)) return;
+        cancelAnimationFrame(this.selectionFrame);
+        this.selectionFrame = requestAnimationFrame(() => {
+            if (this.isPermanent) return;
+            if (this.getSelectedNodes().length >= 2) {
+                this.show();
+                this.setPosition(event.clientX - 240, event.clientY - 20);
+            } else {
+                this.hide();
+            }
+        });
     },
     // 开始拖拽
     onDragStart(e) {
-        if (!e.target.classList.contains('divider') || this.isDragging) return;
+        if (e.button !== 0 || !e.target.classList.contains('divider') || this.isDragging) return;
+        e.preventDefault();
         this.isDragging = true;
         this.initialX = e.clientX;
         this.initialY = e.clientY;
-        this.dragStartX = this.buttonContainer.offsetLeft;
-        this.dragStartY = this.buttonContainer.offsetTop;
+        const rect = this.buttonContainer.getBoundingClientRect();
+        this.dragStartX = rect.left;
+        this.dragStartY = rect.top;
 
         document.addEventListener('mousemove', this.boundOnDragging);
         document.addEventListener('mouseup', this.boundOnDragEnd);
@@ -337,39 +332,17 @@ const ButtonManager = {
             const deltaX = e.clientX - this.initialX;
             const deltaY = e.clientY - this.initialY;
 
-            // 计算新的位置
-            let newLeft = this.dragStartX + deltaX;
-            let newTop = this.dragStartY + deltaY;
-
-            // 获取容器的宽高和屏幕的宽高
-            const containerRect = this.buttonContainer.getBoundingClientRect();
-            const windowWidth = window.innerWidth;
-            const windowHeight = window.innerHeight;
-
-            // 边缘控制，确保容器不超出屏幕
-            if (newLeft < 0) {
-                newLeft = 0;
-            } else if (newLeft + containerRect.width > windowWidth) {
-                newLeft = windowWidth - containerRect.width;
-            }
-
-            if (newTop < 0) {
-                newTop = 0;
-            } else if (newTop + containerRect.height > windowHeight) {
-                newTop = windowHeight - containerRect.height;
-            }
-
-            // 更新位置
-            this.buttonContainer.style.left = `${newLeft}px`;
-            this.buttonContainer.style.top = `${newTop}px`;
+            this.setPosition(this.dragStartX + deltaX, this.dragStartY + deltaY);
         }
     },
     // 结束拖拽
     onDragEnd() {
+        if (!this.isDragging) return;
         this.isDragging = false;
         // 移除事件监听器
         document.removeEventListener('mousemove', this.boundOnDragging);
         document.removeEventListener('mouseup', this.boundOnDragEnd);
+        if (!this.isPermanent) return;
 
         // 获取按钮容器的位置信息
         const rect = this.buttonContainer.getBoundingClientRect();
@@ -410,13 +383,16 @@ const ButtonManager = {
         localStorage.setItem('NodeAlignerButtonContainerPosition', JSON.stringify({ top, left, right, bottom }));
     },
     destroy() {
-        const divider = this.buttonContainer.querySelector('.divider');
-        if (divider) {
-            divider.removeEventListener('mousedown', this.boundOnDragStart);
-        }
         document.removeEventListener('mousemove', this.boundOnDragging);
         document.removeEventListener('mouseup', this.boundOnDragEnd);
-
+        document.removeEventListener('pointerup', this.boundOnSelectionChange, true);
+        document.removeEventListener('pointerdown', this.boundOnDocumentPointerDown, true);
+        cancelAnimationFrame(this.selectionFrame);
+        clearTimeout(this.tooltipTimer);
+        this.buttonContainer?.remove();
+        this.buttonContainer = null;
+        this.contextMenu = null;
+        this.isDragging = false;
         this.isInitialized = false;
     },
     // 恢复位置
@@ -468,9 +444,32 @@ const ButtonManager = {
     },
     // 获取当前选中的节点
     getSelectedNodes() {
-        if (!LGraphCanvas.active_canvas) return [];
-        const selectedNodesObj = LGraphCanvas.active_canvas.selected_nodes;
-        return selectedNodesObj ? Object.values(selectedNodesObj) : [];
+        const canvas = app.canvas;
+        if (!canvas) return [];
+        if (canvas.selectedItems) {
+            return [...canvas.selectedItems].filter(item => item instanceof window.LGraphNode);
+        }
+        return Object.values(canvas.selected_nodes || {});
+    },
+    runAction(action, event) {
+        const canvas = app.canvas;
+        if (!canvas) return;
+        const graph = canvas.graph;
+        const changesNodes = this.getSelectedNodes().length > 0;
+        if (changesNodes) {
+            if (!graph) return;
+            graph.beforeChange();
+            canvas.emitBeforeChange?.();
+        }
+        try {
+            action.call(this, event);
+        } finally {
+            if (changesNodes) {
+                graph.afterChange();
+                canvas.emitAfterChange?.();
+            }
+            canvas.setDirty(true, true);
+        }
     },
     // 辅助函数：按照 X 或 Y 坐标分组
     groupNodesByCoordinate(nodes, axis, tolerance = 1000) {
@@ -520,11 +519,10 @@ const ButtonManager = {
     alignLeft() {
         const selectedNodes = this.getSelectedNodes();
         if (selectedNodes.length === 0) {
-            const canvas = LGraphCanvas.active_canvas;
+            const canvas = app.canvas;
             if (canvas) {
                 canvas.ds.offset = [80, 140]; // 重置视图位置
                 canvas.ds.scale = 1;          // 重置缩放比例
-                canvas.setDirty(true, true);
             }
         } else {
             // 按 X 轴进行分组
@@ -536,7 +534,6 @@ const ButtonManager = {
                 });
             });
         }
-        LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 右对齐
@@ -552,7 +549,6 @@ const ButtonManager = {
                 });
             });
         }
-        LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 顶部对齐
@@ -568,7 +564,6 @@ const ButtonManager = {
                 });
             });
         }
-        LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 底部对齐
@@ -584,7 +579,6 @@ const ButtonManager = {
                 });
             });
         }
-        LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 水平居中对齐
@@ -600,7 +594,6 @@ const ButtonManager = {
                 });
             });
         }
-        LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 垂直居中对齐
@@ -616,7 +609,6 @@ const ButtonManager = {
                 });
             });
         }
-        LGraphCanvas.active_canvas.setDirty(true, true);
     },
 
     // 计算组内节点的中心坐标
@@ -652,9 +644,6 @@ const ButtonManager = {
                 node.pos[axis] = current;  // 设置当前节点位置
                 current += node.size[axis] + spacing;  // 更新下一个节点位置
             });
-
-            // 重新渲染画布
-            LGraphCanvas.active_canvas.setDirty(true, true);
         }
     },
 
@@ -739,9 +728,6 @@ const ButtonManager = {
                     const node = column[0];
                 }
             });
-
-            // 重新渲染画布
-            LGraphCanvas.active_canvas.setDirty(true, true);
         }
     },
     // 等宽 对齐最大值
@@ -769,41 +755,22 @@ const ButtonManager = {
             // 使用传入的比较函数（默认为 Math.max）
             const sizeValues = nodes.map(node => node.size[axis]);
             const targetSize = comparator(...sizeValues);
-    
+
             // 将尺寸调整为最近的5的倍数
             const roundedTargetSize = Math.round(targetSize / 5) * 5;
-    
+
             nodes.forEach(node => {
-                node.size[axis] = roundedTargetSize; // 设置所有节点的大小为目标值（5的倍数）
+                const size = [...node.size];
+                size[axis] = roundedTargetSize;
+                node.setSize(size);
             });
-    
-            LGraphCanvas.active_canvas.setDirty(true, true);
         }
     }
 };
 
-function pollForCanvas() {
-    const canvas = document.querySelector('canvas#graph-canvas');
-    if (canvas) {
+app.registerExtension({
+    name: "Comfy.NodeAligner",
+    setup() {
         ButtonManager.init();
-        // 监听左键单击事件
-        canvas.addEventListener('click', function (event) {
-            // 检查是否为非驻留模式
-            if (!ButtonManager.isPermanent) {
-                const selectedNodes = ButtonManager.getSelectedNodes();
-                if (selectedNodes.length >= 2) {
-                    ButtonManager.show();
-                    ButtonManager.setPosition(event.layerX - 240, event.layerY - 20);
-                } else {
-                    ButtonManager.hide();
-                }
-            }
-        });
-    } else {
-        setTimeout(pollForCanvas, 1000); // 每隔 1 秒尝试查找一次
     }
-}
-
-// 启动轮询查找
-pollForCanvas();
-
+});
