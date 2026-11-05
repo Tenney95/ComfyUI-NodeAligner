@@ -50,6 +50,22 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    ```
 2. 将 `ComfyUI-NodeAligner` 文件夹复制到 `ComfyUI/custom_nodes` 目录下。  
 
+## 1.0.2 行列布局修复 Grid layout fixes
+
+- 修复选中 4 个及以上节点时，偏移节点被自动拆组、未参与对齐的问题。
+- 左右和水平居中按列整理，上下和垂直居中按行整理；水平分布按行，垂直分布按列。
+- 支持不同尺寸、轻微错位及缺格网格；结果不依赖选中顺序，重复点击保持稳定。
+- 每行/列独立计算间距，分布只改变对应方向。空间不足时从首个节点向后展开，至少留 20 个画布单位；对齐后的行列互相覆盖时会增大间距。
+- 布局使用实际渲染尺寸，兼容 Nodes 2.0 的控件最小尺寸；保留旧前端的尺寸接口。
+
+Aligns within established rows/columns, distributes each track independently, uses rendered node dimensions, and fixes offset nodes being omitted from selections of four or more.
+
+只有一条成形的行/列时，会把孤立的偏移节点一起整理。稀疏布局若希望保留独立行列，可以按行/列分批选择。
+
+2026-11-05 验证：32 项回归检查通过，涵盖 4/8 节点、2×3/3×3 网格、缺中心格、异尺寸、重叠、选择顺序和重复点击；另对固定样本进行 20,000 次稀疏网格动作检查，未发现选择顺序差异或重复点击漂移。
+
+本机前端 1.57.6 已实测四节点错位对齐及撤销、传统节点的多行多列整理、Nodes 2.0 的实际边界对齐及重复点击稳定性。
+
 ## 1.0.1 兼容更新 Compatibility update
 
 - 接入 ComfyUI 扩展生命周期，优先使用 `selectedItems`，保留旧前端选区兼容。

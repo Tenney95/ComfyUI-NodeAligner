@@ -250,25 +250,25 @@ const ButtonManager = {
     getButtons() {
         return [
             /* 左对齐 */
-            { id: 'alignLeft', title: '左对齐 / 未选择时重置视图', svg: alignLeftSvg, action: this.alignLeft.bind(this) },
+            { id: 'alignLeft', title: '左对齐（按列）/ 未选择时重置视图', svg: alignLeftSvg, action: this.alignLeft.bind(this) },
             /* 竖向居中对齐 */
-            { id: 'alignCenterVertically', title: '水平居中', svg: alignCenterVerticallySvg, action: this.alignCenterVertically.bind(this) },
+            { id: 'alignCenterVertically', title: '水平居中（按列）', svg: alignCenterVerticallySvg, action: this.alignCenterVertically.bind(this) },
             /* 右对齐 */
-            { id: 'alignRight', title: '右对齐', svg: alignRightSvg, action: this.alignRight.bind(this) },
+            { id: 'alignRight', title: '右对齐（按列）', svg: alignRightSvg, action: this.alignRight.bind(this) },
             // 分割线
             { type: 'divider' },
             /* 顶部对齐 */
-            { id: 'alignTop', title: '顶部对齐', svg: alignTopSvg, action: this.alignTop.bind(this) },
+            { id: 'alignTop', title: '顶部对齐（按行）', svg: alignTopSvg, action: this.alignTop.bind(this) },
             /* 横向居中对齐 */
-            { id: 'alignCenterHorizontally', title: '垂直居中', svg: alignCenterHorizontallySvg, action: this.alignCenterHorizontally.bind(this) },
+            { id: 'alignCenterHorizontally', title: '垂直居中（按行）', svg: alignCenterHorizontallySvg, action: this.alignCenterHorizontally.bind(this) },
             /* 底部对齐 */
-            { id: 'alignBottom', title: '底部对齐', svg: alignBottomSvg, action: this.alignBottom.bind(this) },
+            { id: 'alignBottom', title: '底部对齐（按行）', svg: alignBottomSvg, action: this.alignBottom.bind(this) },
             // 分割线
             { type: 'divider' },
             /* 横向分布 */
-            { id: 'horizontalDistribution', title: '水平分布', svg: horizontalDistributionSvg, action: this.horizontalDistribution.bind(this) },
+            { id: 'horizontalDistribution', title: '水平分布（按行）', svg: horizontalDistributionSvg, action: this.horizontalDistribution.bind(this) },
             /* 竖向分布 */
-            { id: 'verticalDistribution', title: '垂直分布', svg: verticalDistributionSvg, action: this.verticalDistribution.bind(this) },
+            { id: 'verticalDistribution', title: '垂直分布（按列）', svg: verticalDistributionSvg, action: this.verticalDistribution.bind(this) },
             // 分割线
             { type: 'divider' },
             /* 等宽 */
@@ -301,6 +301,7 @@ const ButtonManager = {
         if (this.isPermanent || event.composedPath().includes(this.buttonContainer)) return;
         const canvas = app.canvas?.canvas;
         if (!canvas?.parentElement?.contains(event.target)) return;
+        if (event.target !== canvas && !event.target.closest?.('.lg-node')) return;
         cancelAnimationFrame(this.selectionFrame);
         this.selectionFrame = requestAnimationFrame(() => {
             if (this.isPermanent) return;
@@ -471,264 +472,126 @@ const ButtonManager = {
             canvas.setDirty(true, true);
         }
     },
-    // 辅助函数：按照 X 或 Y 坐标分组
-    groupNodesByCoordinate(nodes, axis, tolerance = 1000) {
-        if (nodes.length < 4) {
-            // 当选中节点小于 4 个时，不进行分组，直接返回包含所有节点的单个组
-            return [nodes];
-        }
+    // Nodes 2.0 的控件最小尺寸可能大于工作流里保存的 size。
+    getNodeSize(node, axis) {
+        return (node.renderingSize ?? node.size)[axis];
+    },
+    compareNodes(a, b, axis) {
+        return a.pos[axis] - b.pos[axis]
+            || a.pos[1 - axis] - b.pos[1 - axis]
+            || String(a.id).localeCompare(String(b.id));
+    },
+    getTrackTolerance(nodes, axis) {
+        const sizes = nodes.map(node => this.getNodeSize(node, axis)).sort((a, b) => a - b);
+        const middle = Math.floor(sizes.length / 2);
+        const median = sizes.length % 2 ? sizes[middle] : (sizes[middle - 1] + sizes[middle]) / 2;
+        return median / 4;
+    },
+    // 用起点、中心或终点识别已经成形的行列，避免节点宽高不同造成拆组。
+    getNodeGroups(nodes, axis, preferredAnchor = 0) {
+        if (nodes.length < 2) return [nodes];
+        const tolerance = this.getTrackTolerance(nodes, axis);
+        let bestGroups = null;
+        let bestCount = 0;
+        let bestTrackCount = Infinity;
+        let bestSpread = Infinity;
 
-        const groups = [];
-        const otherAxis = 1 - axis; // 获取另一个轴 (0 -> 1, 1 -> 0)
-
-        // 1. 基于主轴（axis）对节点进行排序
-        nodes.sort((a, b) => a.pos[axis] - b.pos[axis]);
-
-        // 2. 计算主轴上的间距分布
-        const gaps = [];
-        for (let i = 1; i < nodes.length; i++) {
-            gaps.push(nodes[i].pos[axis] - (nodes[i - 1].pos[axis] + nodes[i - 1].size[axis]));
-        }
-
-        // 3. 使用统计方法确定分组的阈值（例如，平均间距加上标准差）
-        const avgGap = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
-        const stdDevGap = Math.sqrt(gaps.reduce((sum, gap) => sum + Math.pow(gap - avgGap, 2), 0) / gaps.length);
-        const threshold = avgGap + stdDevGap; // 阈值设置为平均间距加上一个标准差
-
-        // 4. 根据间距和副轴（otherAxis）上的位置进行分组
-        let currentGroup = [nodes[0]];
-        for (let i = 1; i < nodes.length; i++) {
-            const gap = nodes[i].pos[axis] - (nodes[i - 1].pos[axis] + nodes[i - 1].size[axis]);
-            const otherAxisDiff = Math.abs(nodes[i].pos[otherAxis] - nodes[i - 1].pos[otherAxis]);
-
-            if (gap <= threshold && otherAxisDiff <= tolerance) {
-                // 如果间距小于阈值且副轴上的差异小于容差，则将节点添加到当前组
-                currentGroup.push(nodes[i]);
-            } else {
-                // 否则，开始一个新的组
-                groups.push(currentGroup);
-                currentGroup = [nodes[i]];
+        for (const anchor of new Set([preferredAnchor, 0, 0.5, 1])) {
+            const coordinate = node => node.pos[axis] + this.getNodeSize(node, axis) * anchor;
+            const sorted = [...nodes].sort((a, b) => coordinate(a) - coordinate(b)
+                || this.compareNodes(a, b, 1 - axis));
+            const groups = [];
+            for (const node of sorted) {
+                const group = groups[groups.length - 1];
+                // 限制整组跨度，不让相邻节点通过链式合并串成一组。
+                if (group && coordinate(node) - coordinate(group[0]) <= tolerance) {
+                    group.push(node);
+                } else {
+                    groups.push([node]);
+                }
+            }
+            const repeated = groups.filter(group => group.length > 1);
+            const count = repeated.reduce((sum, group) => sum + group.length, 0);
+            const spread = repeated.reduce((sum, group) => sum
+                + coordinate(group[group.length - 1]) - coordinate(group[0]), 0);
+            if (count > bestCount || (count === bestCount
+                && (repeated.length < bestTrackCount
+                    || (repeated.length === bestTrackCount && spread < bestSpread)))) {
+                bestGroups = groups;
+                bestCount = count;
+                bestTrackCount = repeated.length;
+                bestSpread = spread;
             }
         }
-        groups.push(currentGroup); // 添加最后一组
-
-        return groups;
+        // 只有一条成形轨道时，将偏移的孤立节点一起整理（例如三齐一歪）。
+        return bestGroups?.filter(group => group.length > 1).length >= 2 ? bestGroups : [nodes];
     },
-
-    // 左对齐
+    alignNodes(axis, anchor) {
+        const nodes = this.getSelectedNodes();
+        if (nodes.length === 0) return;
+        const trackGap = Math.max(20, this.getTrackTolerance(nodes, axis) + 1);
+        let previousEnd = -Infinity;
+        for (const group of this.getNodeGroups(nodes, axis, anchor)) {
+            const minimum = Math.min(...group.map(node => node.pos[axis]));
+            const maximum = Math.max(...group.map(node => node.pos[axis] + this.getNodeSize(node, axis)));
+            const maximumSize = Math.max(...group.map(node => this.getNodeSize(node, axis)));
+            let target = minimum + (maximum - minimum) * anchor;
+            // 宽高不同的相邻行列可能互相覆盖，整条轨道向后让出间距。
+            target += Math.max(0, previousEnd + trackGap - (target - maximumSize * anchor));
+            group.forEach(node => {
+                node.pos[axis] = target - this.getNodeSize(node, axis) * anchor;
+            });
+            previousEnd = target + maximumSize * (1 - anchor);
+        }
+    },
+    // 左对齐；未选择节点时恢复预设视图。
     alignLeft() {
-        const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length === 0) {
+        if (this.getSelectedNodes().length === 0) {
             const canvas = app.canvas;
             if (canvas) {
-                canvas.ds.offset = [80, 140]; // 重置视图位置
-                canvas.ds.scale = 1;          // 重置缩放比例
+                canvas.ds.offset = [80, 140];
+                canvas.ds.scale = 1;
             }
         } else {
-            // 按 X 轴进行分组
-            const groups = this.groupNodesByCoordinate(selectedNodes, 0); // 分组基于X轴坐标
-            groups.forEach(group => {
-                const leftMost = Math.min(...group.map(node => node.pos[0]));
-                group.forEach(node => {
-                    node.pos[0] = leftMost; // 左对齐
-                });
-            });
+            this.alignNodes(0, 0);
         }
     },
-
-    // 右对齐
     alignRight() {
-        const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length > 0) {
-            // 按 X 轴进行分组
-            const groups = this.groupNodesByCoordinate(selectedNodes, 0); // 分组基于X轴坐标
-            groups.forEach(group => {
-                const rightMost = Math.max(...group.map(node => node.pos[0] + node.size[0]));
-                group.forEach(node => {
-                    node.pos[0] = rightMost - node.size[0]; // 右对齐
-                });
-            });
-        }
+        this.alignNodes(0, 1);
     },
-
-    // 顶部对齐
     alignTop() {
-        const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length > 0) {
-            // 按 Y 轴进行分组
-            const groups = this.groupNodesByCoordinate(selectedNodes, 1); // 分组基于Y轴坐标
-            groups.forEach(group => {
-                const topMost = Math.min(...group.map(node => node.pos[1]));
-                group.forEach(node => {
-                    node.pos[1] = topMost; // 顶部对齐
-                });
-            });
-        }
+        this.alignNodes(1, 0);
     },
-
-    // 底部对齐
     alignBottom() {
-        const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length > 0) {
-            // 按 Y 轴进行分组
-            const groups = this.groupNodesByCoordinate(selectedNodes, 1); // 分组基于Y轴坐标
-            groups.forEach(group => {
-                const bottomMost = Math.max(...group.map(node => node.pos[1] + node.size[1]));
-                group.forEach(node => {
-                    node.pos[1] = bottomMost - node.size[1]; // 底部对齐
-                });
-            });
-        }
+        this.alignNodes(1, 1);
     },
-
-    // 水平居中对齐
     alignCenterHorizontally() {
-        const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length > 0) {
-            // 按 Y 轴进行分组
-            const groups = this.groupNodesByCoordinate(selectedNodes, 1); // 分组基于Y轴坐标
-            groups.forEach(group => {
-                const centerY = this.calculateCenterInGroup(group, 1); // 计算 Y 轴中心
-                group.forEach(node => {
-                    node.pos[1] = centerY - node.size[1] / 2; // 垂直居中
-                });
-            });
-        }
+        this.alignNodes(1, 0.5);
     },
-
-    // 垂直居中对齐
     alignCenterVertically() {
-        const selectedNodes = this.getSelectedNodes();
-        if (selectedNodes.length > 0) {
-            // 按 X 轴进行分组
-            const groups = this.groupNodesByCoordinate(selectedNodes, 0); // 分组基于X轴坐标
-            groups.forEach(group => {
-                const centerX = this.calculateCenterInGroup(group, 0); // 计算 X 轴中心
-                group.forEach(node => {
-                    node.pos[0] = centerX - node.size[0] / 2; // 水平居中
-                });
+        this.alignNodes(0, 0.5);
+    },
+    distributeNodes(axis) {
+        const nodes = this.getSelectedNodes();
+        for (const group of this.getNodeGroups(nodes, 1 - axis)) {
+            if (group.length < 2) continue;
+            group.sort((a, b) => this.compareNodes(a, b, axis));
+            const start = group[0].pos[axis];
+            const end = Math.max(...group.map(node => node.pos[axis] + this.getNodeSize(node, axis)));
+            const totalSize = group.reduce((sum, node) => sum + this.getNodeSize(node, axis), 0);
+            const spacing = Math.max(20, (end - start - totalSize) / (group.length - 1));
+            let current = start;
+            group.forEach(node => {
+                node.pos[axis] = current;
+                current += this.getNodeSize(node, axis) + spacing;
             });
         }
     },
-
-    // 计算组内节点的中心坐标
-    calculateCenterInGroup(group, axis) {
-        const minCoord = Math.min(...group.map(node => node.pos[axis]));
-        const maxCoord = Math.max(...group.map(node => node.pos[axis] + node.size[axis]));
-        return (minCoord + maxCoord) / 2;
-    },
-
-    // 横向分布
     horizontalDistribution() {
-        const nodes = this.getSelectedNodes();
-        const axis = 0;
-        if (nodes.length > 1) {
-            // 按照节点在 axis 轴上的位置（高低）进行排序
-            nodes.sort((a, b) => a.pos[axis] - b.pos[axis]);
-
-            // 获取最小和最大的位置范围
-            const min = Math.min(...nodes.map(node => node.pos[axis]));
-            const max = Math.max(...nodes.map(node => node.pos[axis] + node.size[axis]));
-
-            // 计算节点的总尺寸
-            const totalSize = nodes.reduce((sum, node) => sum + node.size[axis], 0);
-
-            // 计算间距
-            const spacing = (max - min - totalSize) / (nodes.length - 1);
-
-            // 初始化当前分布位置
-            let current = min;
-
-            // 遍历排序后的节点，按顺序分布
-            nodes.forEach(node => {
-                node.pos[axis] = current;  // 设置当前节点位置
-                current += node.size[axis] + spacing;  // 更新下一个节点位置
-            });
-        }
+        this.distributeNodes(0);
     },
-
-    // 纵向分布
     verticalDistribution() {
-        const nodes = this.getSelectedNodes();
-
-        if (nodes.length > 1) {
-            const axis = 1; // Y轴
-            const otherAxis = 0; // X轴
-            const tolerance = 100; // 用于将节点分组的容差
-            const minSpacing = 20; // 最小间距，保证节点之间至少有 20 像素的间隔
-
-            // 用于存储列的数组
-            const columns = [];
-
-            // 将节点按照 X 轴的位置进行分组（分成列）
-            nodes.forEach(node => {
-                let foundColumn = null;
-
-                for (let column of columns) {
-                    const columnX = column[0].pos[otherAxis];
-
-                    if (Math.abs(columnX - node.pos[otherAxis]) <= tolerance) {
-                        foundColumn = column;
-                        break;
-                    }
-                }
-
-                if (foundColumn) {
-                    foundColumn.push(node);
-                } else {
-                    columns.push([node]);
-                }
-            });
-
-            // 计算每列的总高度
-            const columnHeights = columns.map(column => {
-                const minY = Math.min(...column.map(node => node.pos[axis]));
-                const maxY = Math.max(...column.map(node => node.pos[axis] + node.size[axis]));
-                return maxY - minY;
-            });
-
-            // 找到最高列的高度
-            const maxColumnHeight = Math.max(...columnHeights);
-
-            // 对每列进行处理
-            columns.forEach((column, columnIndex) => {
-                if (column.length > 1) {
-                    // 按照节点在 Y 轴上的位置（高低）进行排序
-                    column.sort((a, b) => a.pos[axis] - b.pos[axis]);
-
-                    // 获取当前列的最小和最大 Y 位置
-                    const minY = Math.min(...column.map(node => node.pos[axis]));
-
-                    // 计算当前列的节点总尺寸
-                    const totalSize = column.reduce((sum, node) => sum + node.size[axis], 0);
-
-                    // 计算该列的额外可用空间并分配给节点之间的间距
-                    let spacing = (maxColumnHeight - totalSize) / (column.length - 1);
-                    spacing = Math.max(spacing, minSpacing);  // 保证间距不小于最小间距
-
-                    // 初始化当前分布位置，保持第一个节点位置不变
-                    let currentY = column[0].pos[axis];  // 将第一个节点的位置作为起点
-
-                    // 分布节点
-                    column.forEach((node, idx) => {
-                        if (idx === 0) {
-                            // 第一个节点位置保持不变
-                            currentY += node.size[axis] + spacing;
-                        } else {
-                            // 设置当前节点位置
-                            node.pos[axis] = currentY;
-                            currentY += node.size[axis] + spacing;
-                        }
-
-                        // 对齐 X 轴位置（所有节点在列内对齐）
-                        node.pos[otherAxis] = column[0].pos[otherAxis];
-                    });
-                } else if (column.length === 1) {
-                    // 单个节点时，保持第一个节点与最小 Y 位置对齐
-                    const node = column[0];
-                }
-            });
-        }
+        this.distributeNodes(1);
     },
     // 等宽 对齐最大值
     equalWidth() {
