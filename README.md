@@ -50,12 +50,21 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    ```
 2. 将 `ComfyUI-NodeAligner` 文件夹复制到 `ComfyUI/custom_nodes` 目录下。  
 
+## 1.0.4 修复对齐时整列偏移 Fix unintended track movement
+
+- 修复矮节点行内错位超过节点高度时的行列识别，覆盖实际 `270×58` 节点、行内错位 `78` 的六节点排列。
+- 对齐保留原行列基准，移除把重叠行列自动推开的行为。需要调整间距时使用分布按钮。
+- 保留已对齐的共同边线，修复不同宽度节点重复右对齐时合并相邻列的问题。
+- 在用户当前工作流的真实节点上验证先左后上、先上后左、重复点击和撤销；缩放与视图偏移保持不变。35 项回归检查通过。
+
+Preserves track reference positions during alignment, recognizes offset rows of short nodes, and keeps repeated alignment stable. Spacing changes remain part of distribution.
+
 ## 1.0.3 网格匹配与对齐基准 Grid matching and reference nodes
 
 - 修复同一网格中偏移较大的节点被当作独立行/列，导致左对齐后再上对齐仍不整齐的问题。
 - 通过跨行/列的有序匹配找回对应单元，允许缺格，不将不完整的行直接压缩到左侧。
 - 在识别出的网格内，左对齐以每列最上方节点的左边为基准，上对齐以每行最左方节点的上边为基准。
-- 33 项回归检查通过，包括用户提供的六节点错位排列、缺格、选择顺序、先左后上／先上后左和重复执行。本机前端 1.57.6 已按该六节点位置实测完整的“左对齐→上对齐”操作，结果符合行列基准。
+- 当时的六节点验证使用了 Note 节点，未覆盖用户实际节点的高度与错位比例；相关缺口在 1.0.4 中修复。
 
 Matches cells across rows and columns, including missing cells. Grid left alignment follows the top node of each column; grid top alignment follows the left node of each row.
 
@@ -64,7 +73,7 @@ Matches cells across rows and columns, including missing cells. Grid left alignm
 - 修复选中 4 个及以上节点时，偏移节点被自动拆组、未参与对齐的问题。
 - 左右和水平居中按列整理，上下和垂直居中按行整理；水平分布按行，垂直分布按列。
 - 支持不同尺寸、轻微错位及缺格网格；结果不依赖选中顺序，重复点击保持稳定。
-- 每行/列独立计算间距，分布只改变对应方向。空间不足时从首个节点向后展开，至少留 20 个画布单位；对齐后的行列互相覆盖时会增大间距。
+- 每行/列独立计算间距，分布只改变对应方向。空间不足时从首个节点向后展开，至少留 20 个画布单位。1.0.4 起，对齐按钮保留原行列基准，不自动调整行列间距。
 - 布局使用实际渲染尺寸，兼容 Nodes 2.0 的控件最小尺寸；保留旧前端的尺寸接口。
 
 Aligns within established rows/columns, distributes each track independently, uses rendered node dimensions, and fixes offset nodes being omitted from selections of four or more.

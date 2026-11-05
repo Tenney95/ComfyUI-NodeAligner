@@ -512,6 +512,23 @@ const ButtonManager = {
         }
         return groups;
     },
+    // 矮节点错位后投影可能不重叠，明显的行/列间断层仍能提供分层证据。
+    getGapGroups(nodes, axis) {
+        const sorted = [...nodes].sort((a, b) => this.compareNodes(a, b, axis));
+        const gaps = sorted.slice(1).map((node, index) => node.pos[axis] - sorted[index].pos[axis])
+            .filter(gap => gap > 0);
+        const typicalGap = this.median(gaps);
+        if (!typicalGap || Math.max(...gaps) <= typicalGap * 2) return [];
+        const groups = [];
+        for (let i = 0; i < sorted.length; i++) {
+            if (i === 0 || sorted[i].pos[axis] - sorted[i - 1].pos[axis] > typicalGap * 1.5) {
+                groups.push([sorted[i]]);
+            } else {
+                groups[groups.length - 1].push(sorted[i]);
+            }
+        }
+        return groups;
+    },
     // 跨行/列做有序匹配；允许缺格和新增列，不把短行向左压缩。
     matchGridTracks(groups, axis, nodes) {
         const seed = groups.reduce((longest, group) => group.length > longest.length ? group : longest);
@@ -571,15 +588,17 @@ const ButtonManager = {
         for (const axis of [1, 0]) {
             const crossTolerance = this.getTrackTolerance(nodes, 1 - axis);
             const scale = Math.max(1, this.getTrackTolerance(nodes, axis) * 4);
-            for (const groups of [this.getNodeGroups(nodes, axis), this.getOverlappingGroups(nodes, axis)]) {
+            for (const groups of [this.getNodeGroups(nodes, axis), this.getOverlappingGroups(nodes, axis),
+                this.getGapGroups(nodes, axis)]) {
                 const repeated = groups.filter(group => group.length > 1
                     && Math.max(...group.map(node => node.pos[1 - axis]))
                         - Math.min(...group.map(node => node.pos[1 - axis])) > crossTolerance);
                 if (repeated.length < 2) continue;
                 const count = repeated.reduce((sum, group) => sum + group.length, 0);
-                const spread = repeated.reduce((sum, group) => sum
-                    + (Math.max(...group.map(node => node.pos[axis]))
-                        - Math.min(...group.map(node => node.pos[axis]))) / scale, 0);
+                const spread = repeated.reduce((sum, group) => sum + Math.min(...[0, 0.5, 1].map(anchor => {
+                    const coordinates = group.map(node => node.pos[axis] + this.getNodeSize(node, axis) * anchor);
+                    return Math.max(...coordinates) - Math.min(...coordinates);
+                })) / scale, 0);
                 if (count > bestCount || (count === bestCount && spread < bestSpread)) {
                     best = { axis, groups };
                     bestCount = count;
@@ -599,57 +618,57 @@ const ButtonManager = {
         let bestCount = 0;
         let bestTrackCount = Infinity;
         let bestSpread = Infinity;
+        let exactGroups = null;
 
         for (const anchor of new Set([preferredAnchor, 0, 0.5, 1])) {
             const coordinate = node => node.pos[axis] + this.getNodeSize(node, axis) * anchor;
             const sorted = [...nodes].sort((a, b) => coordinate(a) - coordinate(b)
                 || this.compareNodes(a, b, 1 - axis));
-            const groups = [];
-            for (const node of sorted) {
-                const group = groups[groups.length - 1];
-                // 限制整组跨度，不让相邻节点通过链式合并串成一组。
-                if (group && coordinate(node) - coordinate(group[0]) <= tolerance) {
-                    group.push(node);
-                } else {
-                    groups.push([node]);
+            for (const threshold of [1e-6, tolerance]) {
+                const groups = [];
+                for (const node of sorted) {
+                    const group = groups[groups.length - 1];
+                    // 限制整组跨度，不让相邻节点通过链式合并串成一组。
+                    if (group && coordinate(node) - coordinate(group[0]) <= threshold) {
+                        group.push(node);
+                    } else {
+                        groups.push([node]);
+                    }
                 }
-            }
-            const repeated = groups.filter(group => group.length > 1);
-            const count = repeated.reduce((sum, group) => sum + group.length, 0);
-            const spread = repeated.reduce((sum, group) => sum
-                + coordinate(group[group.length - 1]) - coordinate(group[0]), 0);
-            if (count > bestCount || (count === bestCount
-                && (repeated.length < bestTrackCount
-                    || (repeated.length === bestTrackCount && spread < bestSpread)))) {
-                bestGroups = groups;
-                bestCount = count;
-                bestTrackCount = repeated.length;
-                bestSpread = spread;
+                const repeated = groups.filter(group => group.length > 1);
+                const count = repeated.reduce((sum, group) => sum + group.length, 0);
+                const spread = repeated.reduce((sum, group) => sum
+                    + coordinate(group[group.length - 1]) - coordinate(group[0]), 0);
+                // 完整的共同边线优先，防止再次点击时把相近但已对齐的列合并。
+                if (threshold === 1e-6 && count === nodes.length
+                    && (!exactGroups || repeated.length < exactGroups.length)) exactGroups = groups;
+                if (threshold === tolerance && (count > bestCount || (count === bestCount
+                    && (repeated.length < bestTrackCount
+                        || (repeated.length === bestTrackCount && spread < bestSpread))))) {
+                    bestGroups = groups;
+                    bestCount = count;
+                    bestTrackCount = repeated.length;
+                    bestSpread = spread;
+                }
             }
         }
         // 只有一条成形轨道时，将偏移的孤立节点一起整理（例如三齐一歪）。
-        return bestGroups?.filter(group => group.length > 1).length >= 2 ? bestGroups : [nodes];
+        return bestTrackCount >= 2 && bestGroups ? (exactGroups ?? bestGroups) : [nodes];
     },
     alignNodes(axis, anchor) {
         const nodes = this.getSelectedNodes();
         if (nodes.length === 0) return;
-        const trackGap = Math.max(20, this.getTrackTolerance(nodes, axis) + 1);
         const grid = this.getNodeGrid(nodes);
         const groups = grid ? (axis === 0 ? grid.columns : grid.rows) : this.getNodeGroups(nodes, axis, anchor);
-        let previousEnd = -Infinity;
         for (const group of groups) {
             const minimum = Math.min(...group.map(node => node.pos[axis]));
             const maximum = Math.max(...group.map(node => node.pos[axis] + this.getNodeSize(node, axis)));
-            const maximumSize = Math.max(...group.map(node => this.getNodeSize(node, axis)));
-            let target = grid && anchor === 0
+            const target = grid && anchor === 0
                 ? this.getReferenceNode(group, 1 - axis).pos[axis]
                 : minimum + (maximum - minimum) * anchor;
-            // 宽高不同的相邻行列可能互相覆盖，整条轨道向后让出间距。
-            target += Math.max(0, previousEnd + trackGap - (target - maximumSize * anchor));
             group.forEach(node => {
                 node.pos[axis] = target - this.getNodeSize(node, axis) * anchor;
             });
-            previousEnd = target + maximumSize * (1 - anchor);
         }
     },
     // 左对齐；未选择节点时恢复预设视图。

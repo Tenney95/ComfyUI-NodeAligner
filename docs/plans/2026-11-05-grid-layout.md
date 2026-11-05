@@ -13,7 +13,7 @@
 - Recognize tracks from node positions and sizes, including already aligned starts, centers, or ends. Sort geometrically so selection order cannot change the result.
 - Require at least two repeated tracks before preserving multiple tracks. Otherwise treat the selection as one row/column, including the reported three-aligned-plus-one-offset case.
 - Each track uses its own bounds and dimensions. If space is insufficient, expand from its first node with at least 20 units between nodes.
-- Alignment keeps established tracks separate; overlapping track bounds move forward to leave at least 20 units between tracks.
+- Alignment preserves each track's reference position, even when rendered bounds overlap. Only distribution changes spacing.
 - Preserve node sizes and unselected nodes. Repeated actions should settle after one click and each action remains one undo step.
 
 ## Implementation
@@ -34,4 +34,12 @@
 
 The user's six-node red-line example exposes a gap in independent one-axis clustering. Match cells across geometrically established rows/columns, allowing skipped cells and newly encountered tracks. Use the topmost node of each column as the grid's left-alignment reference, and the leftmost node of each row as its top-alignment reference.
 
-The regression suite now has 33 passing checks, including the exact reported positions, missing cells, both action orders, selection-order invariance, and repeated execution. The reported positions were also loaded into an isolated real frontend workflow: left alignment moved the lower-right node to its upper reference, then top alignment put all six nodes on the intended two rows and three columns. The temporary workflow was discarded after verification.
+The 1.0.3 suite had 33 passing checks. The isolated frontend fixture used Note nodes, whose height did not reproduce the user's actual short-node row separation; this was a validation gap.
+
+## 1.0.4 actual-node regression correction
+
+Runtime diagnostics in the user's disposable workflow reproduced the runaway without any viewport change. The actual TextToUppercase nodes are 270 by 58 with a row-internal offset of 78. Row detection split those nodes incorrectly, and automatic collision avoidance then pushed the reference columns to the right.
+
+Remove collision pushing from alignment. Add clear coordinate-gap evidence for rows whose projections no longer overlap. Preserve complete shared-edge groups and score track spread using starts, centers, and ends so repeated right alignment of unequal widths does not merge nearby columns.
+
+All 35 regression checks pass, including the actual node sizes and coordinates, oversized rendering bounds, missing cells, and repeated actions. Direct validation in the user's current workflow covers left then top, top then left, repeated clicks, and undo. Reference nodes, stored dimensions, zoom, and viewport offset stay fixed. Temporary numeric diagnostics are removed before publishing.

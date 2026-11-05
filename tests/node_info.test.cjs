@@ -395,7 +395,7 @@ test('all toolbar actions are safe with empty and single-node selections', () =>
     }
 });
 
-test('keeps heterogeneous single columns together and separates overlapping column bounds', () => {
+test('keeps heterogeneous columns together without moving overlapping track references', () => {
     const singleColumn = [[0, 0, 400, 100], [0, 150, 400, 100], [10, 400, 200, 100], [10, 600, 200, 100]];
     for (const [action, axis, expected] of [
         ['alignLeft', 0, [0, 0, 0, 0]], ['verticalDistribution', 1, [0, 200, 400, 600]],
@@ -421,10 +421,12 @@ test('keeps heterogeneous single columns together and separates overlapping colu
             const aligned = nodes.map(node => node.pos[axis] + node.size[axis] * anchor);
             assert.equal(aligned[0], aligned[1], action);
             assert.equal(aligned[2], aligned[3], action);
-            const firstEnd = Math.max(...nodes.slice(0, 2).map(node => node.pos[axis] + node.size[axis]));
-            const secondStart = Math.min(...nodes.slice(2).map(node => node.pos[axis]));
-            assert.ok(secondStart - firstEnd >= 20, `${action}, overlapping track bounds`);
-            if (anchor === 0) assert.deepEqual(nodes.map(node => node.pos[axis]), [50, 50, 513.5, 513.5], action);
+            const targets = anchor === 0 ? [50, 250] : anchor === 1 ? [300, 650] : [100, 300];
+            assert.deepEqual(aligned, [targets[0], targets[0], targets[1], targets[1]], `${action}, original track references`);
+            if (anchor === 0) {
+                assert.deepEqual(nodes.map(node => node.pos[axis]), [50, 50, 250, 250], action);
+                assert.deepEqual([nodes[0].pos[axis], nodes[2].pos[axis]], [data[0][axis], data[2][axis]], action);
+            }
             assert.deepEqual(nodes.map(node => node.pos[1 - axis]), data.map(node => node[1 - axis]), action);
             const first = nodes.map(node => [...node.pos]);
             manager.runAction(manager[action]);
@@ -460,7 +462,7 @@ test('keeps wide and narrow tracks separate after repeated right alignment', () 
         assert.deepEqual(rights.slice(0, 3), Array(3).fill(rights[0]));
         assert.deepEqual(rights.slice(3, 7), Array(4).fill(rights[3]));
         assert.deepEqual(rights.slice(7), Array(2).fill(rights[7]));
-        assert.ok(rights[0] < rights[3] && rights[3] < rights[7]);
+        assert.deepEqual(rights, [900, 900, 900, 1550, 1550, 1550, 1550, 1480, 1480]);
         const first = nodes.map(node => [...node.pos]);
         if (expected) assert.deepEqual(first, expected, 'selection order');
         expected = first;
@@ -488,6 +490,54 @@ test('uses rendered bounds for alignment and distribution without changing store
             assert.deepEqual(nodes.map(node => node.pos[1 - axis]), [0, 0, 0], action);
             assert.deepEqual(nodes.map(node => node.size), [[100, 100], [100, 100], [100, 100]], action);
         }
+    }
+});
+
+test('left alignment keeps established reference nodes and the viewport fixed even with oversized rendered bounds', () => {
+    for (const oversizedMiddle of [false, true]) {
+        const nodes = [0, 200].flatMap(y => [100, 400, 700].map(x => {
+            const node = new LGraphNode(x, y, 600, 100);
+            if (oversizedMiddle && x === 400) node.renderingSize = [3000, 100];
+            return node;
+        }));
+        const { manager, canvas, history } = load(nodes);
+        canvas.ds.offset = [23, -45];
+        canvas.ds.scale = 0.7;
+        const positions = nodes.map(node => [...node.pos]);
+        const view = { offset: [...canvas.ds.offset], scale: canvas.ds.scale };
+        manager.runAction(manager.alignLeft);
+        const message = oversizedMiddle ? 'oversized middle-column renderingSize' : 'already aligned 600-wide nodes';
+        assert.deepEqual(nodes.map(node => node.pos), positions, message);
+        assert.deepEqual(nodes.slice(0, 3).map(node => node.pos[0]), [100, 400, 700], message);
+        assert.deepEqual(nodes.map(node => node.size), nodes.map(() => [600, 100]), message);
+        assert.deepEqual({ offset: [...canvas.ds.offset], scale: canvas.ds.scale }, view, message);
+        assert.deepEqual(history, ['before', 'after'], message);
+    }
+});
+
+test('aligns the actual 270x58 TextToUppercase screenshot without moving reference nodes or the viewport', () => {
+    const xs = [2033.9313086979191, 2537.2539494739226, 3456.8149269557543,
+        2033.9313086979191, 2537.2539494739226, 3118.3149269557543];
+    const ys = [445.01567512710415, 445.01567512710415, 523.0156751271041,
+        798.8750307067206, 876.8750307067206, 876.8750307067206];
+    const expectedX = [xs[0], xs[1], xs[2], xs[0], xs[1], xs[2]];
+    const expectedY = [ys[0], ys[0], ys[0], ys[3], ys[3], ys[3]];
+    const nodes = xs.map((x, index) => new LGraphNode(x, ys[index], 270, 58));
+    const { manager, canvas, history } = load(nodes);
+    canvas.ds.offset = [12.5, -45.75];
+    canvas.ds.scale = 0.7;
+    const view = { offset: [...canvas.ds.offset], scale: canvas.ds.scale };
+    for (const action of ['alignLeft', 'alignTop', 'alignLeft', 'alignTop']) {
+        const axis = action === 'alignLeft' ? 0 : 1;
+        const other = nodes.map(node => node.pos[1 - axis]);
+        const start = history.length;
+        manager.runAction(manager[action]);
+        assert.deepEqual(nodes.map(node => node.pos[axis]), axis === 0 ? expectedX : expectedY, action);
+        assert.deepEqual(nodes.map(node => node.pos[1 - axis]), other, action);
+        assert.deepEqual(nodes.slice(0, 3).map(node => node.pos[0]), xs.slice(0, 3), 'top-row X reference positions');
+        assert.deepEqual(nodes.map(node => node.size), nodes.map(() => [270, 58]), action);
+        assert.deepEqual({ offset: [...canvas.ds.offset], scale: canvas.ds.scale }, view, action);
+        assert.deepEqual(history.slice(start), ['before', 'after'], action);
     }
 });
 
