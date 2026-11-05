@@ -50,6 +50,15 @@ ComfyUI-NodeAligner is a lightweight ComfyUI layout plugin that includes feature
    ```
 2. 将 `ComfyUI-NodeAligner` 文件夹复制到 `ComfyUI/custom_nodes` 目录下。  
 
+## 1.0.3 网格匹配与对齐基准 Grid matching and reference nodes
+
+- 修复同一网格中偏移较大的节点被当作独立行/列，导致左对齐后再上对齐仍不整齐的问题。
+- 通过跨行/列的有序匹配找回对应单元，允许缺格，不将不完整的行直接压缩到左侧。
+- 在识别出的网格内，左对齐以每列最上方节点的左边为基准，上对齐以每行最左方节点的上边为基准。
+- 33 项回归检查通过，包括用户提供的六节点错位排列、缺格、选择顺序、先左后上／先上后左和重复执行。本机前端 1.57.6 已按该六节点位置实测完整的“左对齐→上对齐”操作，结果符合行列基准。
+
+Matches cells across rows and columns, including missing cells. Grid left alignment follows the top node of each column; grid top alignment follows the left node of each row.
+
 ## 1.0.2 行列布局修复 Grid layout fixes
 
 - 修复选中 4 个及以上节点时，偏移节点被自动拆组、未参与对齐的问题。

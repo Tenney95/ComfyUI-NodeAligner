@@ -29,3 +29,9 @@
 - A fixed seed of 2,500 sparse three-column layouts across eight actions (20,000 checks) has no selection-order differences or repeated-action drift.
 - Real frontend validation includes all four offset nodes participating in left alignment, single-step undo, and a two-row/three-column layout retaining its tracks. In Nodes 2.0, the actual rendered right edges align within each column and repeated clicks preserve the result.
 - Temporary workflows were discarded and the original renderer setting restored. Pointer events from workspace tabs and sidebars no longer reposition the temporary toolbar.
+
+## 1.0.3 reference and missing-cell correction
+
+The user's six-node red-line example exposes a gap in independent one-axis clustering. Match cells across geometrically established rows/columns, allowing skipped cells and newly encountered tracks. Use the topmost node of each column as the grid's left-alignment reference, and the leftmost node of each row as its top-alignment reference.
+
+The regression suite now has 33 passing checks, including the exact reported positions, missing cells, both action orders, selection-order invariance, and repeated execution. The reported positions were also loaded into an isolated real frontend workflow: left alignment moved the lower-right node to its upper reference, then top alignment put all six nodes on the intended two rows and three columns. The temporary workflow was discarded after verification.

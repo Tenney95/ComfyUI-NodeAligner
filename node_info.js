@@ -481,11 +481,115 @@ const ButtonManager = {
             || a.pos[1 - axis] - b.pos[1 - axis]
             || String(a.id).localeCompare(String(b.id));
     },
+    median(values) {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+    },
     getTrackTolerance(nodes, axis) {
-        const sizes = nodes.map(node => this.getNodeSize(node, axis)).sort((a, b) => a - b);
-        const middle = Math.floor(sizes.length / 2);
-        const median = sizes.length % 2 ? sizes[middle] : (sizes[middle - 1] + sizes[middle]) / 2;
-        return median / 4;
+        return this.median(nodes.map(node => this.getNodeSize(node, axis))) / 4;
+    },
+    getReferenceNode(group, axis) {
+        return group.reduce((first, node) => this.compareNodes(node, first, axis) < 0 ? node : first);
+    },
+    // 同一行/列保留共同的投影区间，避免通过相邻节点链式合并。
+    getOverlappingGroups(nodes, axis) {
+        const groups = [];
+        const maximumSpan = this.getTrackTolerance(nodes, axis) * 4;
+        let commonEnd = -Infinity;
+        for (const node of [...nodes].sort((a, b) => this.compareNodes(a, b, axis))) {
+            const group = groups[groups.length - 1];
+            const start = node.pos[axis];
+            const end = start + this.getNodeSize(node, axis);
+            if (group && start < commonEnd && start - group[0].pos[axis] <= maximumSpan) {
+                group.push(node);
+                commonEnd = Math.min(commonEnd, end);
+            } else {
+                groups.push([node]);
+                commonEnd = end;
+            }
+        }
+        return groups;
+    },
+    // 跨行/列做有序匹配；允许缺格和新增列，不把短行向左压缩。
+    matchGridTracks(groups, axis, nodes) {
+        const seed = groups.reduce((longest, group) => group.length > longest.length ? group : longest);
+        let tracks = [...seed].sort((a, b) => this.compareNodes(a, b, axis)).map(node => [node]);
+        const typicalSize = this.getTrackTolerance(nodes, axis) * 4;
+        const gapCost = 0.5;
+        for (const group of groups) {
+            if (group === seed) continue;
+            const ordered = [...group].sort((a, b) => this.compareNodes(a, b, axis));
+            const references = tracks.map(track => this.getReferenceNode(track, 1 - axis));
+            const gaps = references.slice(1).map((node, index) => node.pos[axis] - references[index].pos[axis])
+                .filter(gap => gap > 0);
+            const scale = Math.max(1, typicalSize, this.median(gaps));
+            const path = Array.from({ length: tracks.length + 1 }, () => new Uint8Array(ordered.length + 1));
+            let previous = Float64Array.from({ length: ordered.length + 1 }, (_, index) => index * gapCost);
+            let current = new Float64Array(ordered.length + 1);
+            for (let j = 1; j <= ordered.length; j++) path[0][j] = 3;
+            for (let i = 1; i <= tracks.length; i++) {
+                current[0] = i * gapCost;
+                path[i][0] = 2;
+                for (let j = 1; j <= ordered.length; j++) {
+                    const match = previous[j - 1]
+                        + Math.abs(references[i - 1].pos[axis] - ordered[j - 1].pos[axis]) / scale;
+                    const missing = previous[j] + gapCost;
+                    const inserted = current[j - 1] + gapCost;
+                    if (match <= missing && match <= inserted) {
+                        current[j] = match;
+                        path[i][j] = 1;
+                    } else if (missing <= inserted) {
+                        current[j] = missing;
+                        path[i][j] = 2;
+                    } else {
+                        current[j] = inserted;
+                        path[i][j] = 3;
+                    }
+                }
+                [previous, current] = [current, previous];
+            }
+            const matched = [];
+            let i = tracks.length;
+            let j = ordered.length;
+            while (i || j) {
+                const direction = path[i][j];
+                if (direction === 1) matched.push([...tracks[--i], ordered[--j]]);
+                else if (direction === 2) matched.push(tracks[--i]);
+                else matched.push([ordered[--j]]);
+            }
+            tracks = matched.reverse();
+        }
+        return tracks;
+    },
+    getNodeGrid(nodes) {
+        if (nodes.length < 4) return null;
+        let best = null;
+        let bestCount = 0;
+        let bestSpread = Infinity;
+        for (const axis of [1, 0]) {
+            const crossTolerance = this.getTrackTolerance(nodes, 1 - axis);
+            const scale = Math.max(1, this.getTrackTolerance(nodes, axis) * 4);
+            for (const groups of [this.getNodeGroups(nodes, axis), this.getOverlappingGroups(nodes, axis)]) {
+                const repeated = groups.filter(group => group.length > 1
+                    && Math.max(...group.map(node => node.pos[1 - axis]))
+                        - Math.min(...group.map(node => node.pos[1 - axis])) > crossTolerance);
+                if (repeated.length < 2) continue;
+                const count = repeated.reduce((sum, group) => sum + group.length, 0);
+                const spread = repeated.reduce((sum, group) => sum
+                    + (Math.max(...group.map(node => node.pos[axis]))
+                        - Math.min(...group.map(node => node.pos[axis]))) / scale, 0);
+                if (count > bestCount || (count === bestCount && spread < bestSpread)) {
+                    best = { axis, groups };
+                    bestCount = count;
+                    bestSpread = spread;
+                }
+            }
+        }
+        if (!best) return null;
+        const matched = this.matchGridTracks(best.groups, 1 - best.axis, nodes);
+        return best.axis === 1 ? { rows: best.groups, columns: matched } : { rows: matched, columns: best.groups };
     },
     // 用起点、中心或终点识别已经成形的行列，避免节点宽高不同造成拆组。
     getNodeGroups(nodes, axis, preferredAnchor = 0) {
@@ -530,12 +634,16 @@ const ButtonManager = {
         const nodes = this.getSelectedNodes();
         if (nodes.length === 0) return;
         const trackGap = Math.max(20, this.getTrackTolerance(nodes, axis) + 1);
+        const grid = this.getNodeGrid(nodes);
+        const groups = grid ? (axis === 0 ? grid.columns : grid.rows) : this.getNodeGroups(nodes, axis, anchor);
         let previousEnd = -Infinity;
-        for (const group of this.getNodeGroups(nodes, axis, anchor)) {
+        for (const group of groups) {
             const minimum = Math.min(...group.map(node => node.pos[axis]));
             const maximum = Math.max(...group.map(node => node.pos[axis] + this.getNodeSize(node, axis)));
             const maximumSize = Math.max(...group.map(node => this.getNodeSize(node, axis)));
-            let target = minimum + (maximum - minimum) * anchor;
+            let target = grid && anchor === 0
+                ? this.getReferenceNode(group, 1 - axis).pos[axis]
+                : minimum + (maximum - minimum) * anchor;
             // 宽高不同的相邻行列可能互相覆盖，整条轨道向后让出间距。
             target += Math.max(0, previousEnd + trackGap - (target - maximumSize * anchor));
             group.forEach(node => {
@@ -573,7 +681,9 @@ const ButtonManager = {
     },
     distributeNodes(axis) {
         const nodes = this.getSelectedNodes();
-        for (const group of this.getNodeGroups(nodes, 1 - axis)) {
+        const grid = this.getNodeGrid(nodes);
+        const groups = grid ? (axis === 0 ? grid.rows : grid.columns) : this.getNodeGroups(nodes, 1 - axis);
+        for (const group of groups) {
             if (group.length < 2) continue;
             group.sort((a, b) => this.compareNodes(a, b, axis));
             const start = group[0].pos[axis];

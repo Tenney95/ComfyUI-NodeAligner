@@ -277,10 +277,10 @@ test('preserves grid tracks, selection order and repeated alignment or distribut
             data: [[100, 100, 120, 80], [630, 110, 180, 100], [1210, 90, 100, 120],
                 [120, 520, 160, 110], [610, 500, 120, 140], [1200, 530, 200, 90]],
             expected: {
-                alignLeft: [0, [100, 610, 1200, 100, 610, 1200]],
+                alignLeft: [0, [100, 630, 1210, 100, 630, 1210]],
                 alignRight: [0, [160, 630, 1300, 120, 690, 1200]],
                 alignCenterVertically: [0, [130, 620, 1250, 110, 650, 1200]],
-                alignTop: [1, [90, 90, 90, 500, 500, 500]],
+                alignTop: [1, [100, 100, 100, 520, 520, 520]],
                 alignBottom: [1, [130, 110, 90, 530, 500, 550]],
                 alignCenterHorizontally: [1, [110, 100, 90, 515, 500, 525]],
                 horizontalDistribution: [0, [100, 625, 1210, 120, 680, 1200]],
@@ -334,6 +334,39 @@ test('keeps a tall singleton from changing the spacing of other columns', () => 
         const { manager } = load(order.map(index => nodes[index]));
         manager.runAction(manager.verticalDistribution);
         assert.deepEqual(nodes.map(node => node.pos), data.map(node => node.slice(0, 2)));
+    }
+});
+
+test('matches offset and incomplete grid rows using the top and left reference nodes', () => {
+    const layouts = [
+        { name: 'screenshot 2x3', data: [[90, 110], [590, 110], [1515, 190], [90, 470], [590, 550], [1175, 550]],
+            xs: [90, 590, 1515, 90, 590, 1515], ys: [110, 110, 110, 470, 470, 470] },
+        { name: 'screenshot missing B', data: [[90, 110], [1515, 190], [90, 470], [590, 550], [1175, 550]],
+            xs: [90, 1515, 90, 590, 1515], ys: [110, 110, 470, 470, 470] },
+        { name: 'two incomplete rows', data: [[90, 110], [590, 110], [590, 470], [1515, 470]],
+            xs: [90, 590, 590, 1515], ys: [110, 110, 470, 470] },
+    ];
+    for (const layout of layouts) {
+        const indices = layout.data.map((_, index) => index);
+        const orders = [indices, [...indices].reverse(),
+            indices.filter(index => index % 2 === 0).reverse().concat(indices.filter(index => index % 2))];
+        for (const order of orders) {
+            for (const sequence of [['alignLeft', 'alignTop'], ['alignTop', 'alignLeft']]) {
+                const nodes = layout.data.map(([x, y]) => new LGraphNode(x, y, 280, 100));
+                const { manager, history } = load(order.map(index => nodes[index]));
+                for (const action of [...sequence, ...sequence]) {
+                    const axis = action === 'alignLeft' ? 0 : 1;
+                    const other = nodes.map(node => node.pos[1 - axis]);
+                    const start = history.length;
+                    const message = `${layout.name}, ${sequence}, selection ${order}, ${action}`;
+                    manager.runAction(manager[action]);
+                    assert.deepEqual(nodes.map(node => node.pos[axis]), axis === 0 ? layout.xs : layout.ys, message);
+                    assert.deepEqual(nodes.map(node => node.pos[1 - axis]), other, message);
+                    assert.deepEqual(nodes.map(node => node.size), nodes.map(() => [280, 100]), message);
+                    assert.deepEqual(history.slice(start), ['before', 'after'], message);
+                }
+            }
+        }
     }
 });
 
@@ -391,7 +424,7 @@ test('keeps heterogeneous single columns together and separates overlapping colu
             const firstEnd = Math.max(...nodes.slice(0, 2).map(node => node.pos[axis] + node.size[axis]));
             const secondStart = Math.min(...nodes.slice(2).map(node => node.pos[axis]));
             assert.ok(secondStart - firstEnd >= 20, `${action}, overlapping track bounds`);
-            if (anchor === 0) assert.deepEqual(nodes.map(node => node.pos[axis]), [-100, -100, 363.5, 363.5], action);
+            if (anchor === 0) assert.deepEqual(nodes.map(node => node.pos[axis]), [50, 50, 513.5, 513.5], action);
             assert.deepEqual(nodes.map(node => node.pos[1 - axis]), data.map(node => node[1 - axis]), action);
             const first = nodes.map(node => [...node.pos]);
             manager.runAction(manager[action]);
